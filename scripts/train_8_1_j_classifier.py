@@ -1,18 +1,21 @@
-"""Train and evaluate the advisory Section 8(1)(j) Naive Bayes model on RTI-Bench.
+"""Train and evaluate the advisory Section 8(1)(j) text classifier on RTI-Bench.
 
-Input text is the `information_sought` field only. The `instruction` field is not
-used because it contains the cited exemption in about 10% of rows, which leaks the label.
-Rows with blank `information_sought` are excluded: no text model can score them.
+Model: TF-IDF (word unigrams and bigrams, sublinear tf) with L2-regularised logistic
+regression, chosen over Naive Bayes and linear SVM in scripts/compare_8_1_j_classifiers.py.
 
-Evaluation: 5-fold cross-validation, folds by hf_id % 5. Each fold is scored by a model
-trained on the other four folds. Metrics are pooled over the out-of-fold predictions.
-The threshold is reported both at the shipped value and as the best value on the pooled
-out-of-fold sweep (the latter is optimistic, because it is chosen on the same rows).
+Scored text: `title` + `information_sought`. `instruction` and `response` are not used:
+they quote the PIO reply and the Commission's decision and name 8(1)(j) in most positives,
+so a model on them learns the decision, not the request.
 
-The shipped model is trained on all scored rows with text, and written to rules/
-(the agent reads it from there, and the Docker image copies rules/). Results go to artifacts/.
+Evaluation: 5-fold CV, folds by hf_id % 5, pooled out-of-fold predictions. The threshold is
+chosen on the same out-of-fold sweep, so metrics at that threshold are optimistic.
 
-Usage (from the project root, after downloading the dataset to data/rti-bench):
+The shipped model is trained on all scored rows. Its weights are written to rules/ and
+scored in pure Python (agent/exemption_model.py), so the app needs no scikit-learn. This
+script checks that the pure-Python scores match scikit-learn on every row before it writes.
+
+Training needs scikit-learn, which is not in requirements.txt. Install it to retrain.
+Usage (project root, after downloading the dataset to data/rti-bench):
     python -m scripts.train_8_1_j_classifier
 """
 
@@ -20,20 +23,23 @@ from __future__ import annotations
 
 import csv
 import json
-import math
-from collections import Counter
 from pathlib import Path
 from typing import Any
 
+import numpy as np
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.linear_model import LogisticRegression
+
 from agent import nlu
-from agent.exemption_model import ALPHA, MODEL_PATH, posterior, tokenize
+from agent.exemption_model import MODEL_PATH, NGRAM_RANGE, probability
 
 DATA = Path("data/rti-bench/hf_annotated.csv")
 OUT_DIR = Path("artifacts")
 RESULTS = OUT_DIR / "classifier_8_1_j_results.json"
-FIELD = "information_sought"
-SHIPPED_THRESHOLD = 0.4
-THRESHOLDS = [round(t / 100, 2) for t in range(5, 96, 5)]
+TEXT_FIELDS = ("title", "information_sought")
+C = 4.0
+THRESHOLDS = [round(t / 100, 2) for t in range(5, 96, 1)]
+TOLERANCE = 1e-6
 
 
 def load(path: Path) -> list[dict[str, str]]:
@@ -41,27 +47,35 @@ def load(path: Path) -> list[dict[str, str]]:
         return list(csv.DictReader(fh))
 
 
-def train(rows: list[dict[str, str]]) -> dict[str, Any]:
-    docs = [(tokenize(r[FIELD]), r["label"] == "1") for r in rows]
-    pos_docs = sum(label for _, label in docs)
-    neg_docs = len(docs) - pos_docs
-    pos_counts: Counter[str] = Counter()
-    neg_counts: Counter[str] = Counter()
-    for tokens, label in docs:
-        (pos_counts if label else neg_counts).update(tokens)
-    vocab = set(pos_counts) | set(neg_counts)
+def text_of(row: dict[str, str]) -> str:
+    return " ".join((row.get(f) or "").strip() for f in TEXT_FIELDS).strip()
+
+
+def fit(rows: list[dict[str, str]]) -> tuple[TfidfVectorizer, LogisticRegression]:
+    vec = TfidfVectorizer(ngram_range=NGRAM_RANGE, sublinear_tf=True)
+    x = vec.fit_transform([text_of(r) for r in rows])
+    y = np.array([r["label"] == "1" for r in rows], dtype=int)
+    clf = LogisticRegression(C=C, class_weight="balanced", max_iter=2000).fit(x, y)
+    return vec, clf
+
+
+def export(vec: TfidfVectorizer, clf: LogisticRegression, threshold: float) -> dict[str, Any]:
     return {
-        "log_prior_pos": math.log(pos_docs / len(docs)),
-        "log_prior_neg": math.log(neg_docs / len(docs)),
-        "pos_counts": dict(pos_counts),
-        "neg_counts": dict(neg_counts),
-        "pos_total": sum(pos_counts.values()),
-        "neg_total": sum(neg_counts.values()),
-        "vocab_size": len(vocab),
+        "model": "tfidf_logreg",
+        "text_fields": list(TEXT_FIELDS),
+        "ngram_range": list(NGRAM_RANGE),
+        "sublinear_tf": True,
+        "vocabulary": {term: int(idx) for term, idx in vec.vocabulary_.items()},
+        "idf": [float(v) for v in vec.idf_],
+        "coef": [float(v) for v in clf.coef_[0]],
+        "intercept": float(clf.intercept_[0]),
+        "C": C,
+        "threshold": threshold,
     }
 
 
 def metrics(pairs: list[tuple[bool, bool]]) -> dict[str, float | int]:
+    pairs = [(bool(p), bool(a)) for p, a in pairs]
     tp = sum(p and a for p, a in pairs)
     fp = sum(p and not a for p, a in pairs)
     fn = sum((not p) and a for p, a in pairs)
@@ -78,61 +92,68 @@ def metrics(pairs: list[tuple[bool, bool]]) -> dict[str, float | int]:
 
 
 def main() -> int:
-    rows = [r for r in load(DATA) if r["outcome"] != "UNKNOWN" and r[FIELD].strip()]
+    rows = [r for r in load(DATA) if r["outcome"] != "UNKNOWN"]
     for r in rows:
         r["label"] = "1" if "8(1)(j)" in (r["exemptions_cited"] or "") else "0"
         r["fold"] = str(int(r["hf_id"]) % 5)
 
-    oof: list[tuple[float, bool, dict[str, str]]] = []
+    oof_scores = np.zeros(len(rows))
+    labels = np.array([r["label"] == "1" for r in rows])
     for k in range(5):
-        train_rows = [r for r in rows if r["fold"] != str(k)]
-        test_rows = [r for r in rows if r["fold"] == str(k)]
-        model = train(train_rows)
-        for r in test_rows:
-            oof.append((posterior(model, r[FIELD]), r["label"] == "1", r))
+        train_idx = [i for i, r in enumerate(rows) if r["fold"] != str(k)]
+        test_idx = [i for i, r in enumerate(rows) if r["fold"] == str(k)]
+        vec, clf = fit([rows[i] for i in train_idx])
+        x_test = vec.transform([text_of(rows[i]) for i in test_idx])
+        oof_scores[test_idx] = clf.predict_proba(x_test)[:, 1]
 
-    sweep = []
-    for t in THRESHOLDS:
-        sweep.append({"threshold": t, **metrics([(s >= t, a) for s, a, _ in oof])})
+    sweep = [
+        {"threshold": t, **metrics(list(zip(oof_scores >= t, labels)))}
+        for t in THRESHOLDS
+    ]
     best = max(sweep, key=lambda m: m["f1"])
-    clf_shipped = metrics([(s >= SHIPPED_THRESHOLD, a) for s, a, _ in oof])
-    kw = metrics([(nlu.has_personal_data(r[FIELD]), a) for _, a, r in oof])
+    threshold = float(best["threshold"])
 
-    final_model = train(rows)
+    kw_pairs = [(nlu.has_personal_data(r["information_sought"] or ""), r["label"] == "1") for r in rows]
+    vec, clf = fit(rows)
+    model = export(vec, clf, threshold)
+
+    # Check the pure-Python scorer against scikit-learn on every row.
+    sk = clf.predict_proba(vec.transform([text_of(r) for r in rows]))[:, 1]
+    py = np.array([probability(model, text_of(r)) for r in rows])
+    worst = float(np.max(np.abs(sk - py)))
+    if worst > TOLERANCE:
+        raise SystemExit(f"pure-Python scorer differs from scikit-learn by {worst}")
+
     results = {
         "dataset": "joyboseroy/rti-bench (hf_annotated.csv, Source A)",
-        "input_field": FIELD,
+        "text_fields": list(TEXT_FIELDS),
         "label": "exemptions_cited contains 8(1)(j)",
-        "excluded": "outcome == UNKNOWN, and blank information_sought",
-        "smoothing_alpha": ALPHA,
-        "evaluation": "5-fold cross-validation, folds by hf_id % 5, pooled out-of-fold",
-        "rows_evaluated": len(oof),
-        "positives_evaluated": sum(a for _, a, _ in oof),
-        "classifier": {
-            "shipped_threshold": SHIPPED_THRESHOLD,
-            "oof_at_shipped_threshold": clf_shipped,
-            "best_threshold_on_oof_sweep (optimistic)": best,
-            "sweep": sweep,
-        },
-        "keyword_screen": {"oof_pooled_rows": kw},
+        "excluded": "outcome == UNKNOWN",
+        "model": {"type": "tfidf_logreg", "C": C, "ngram_range": list(NGRAM_RANGE)},
+        "evaluation": "5-fold CV, folds by hf_id % 5, pooled out-of-fold",
+        "rows_evaluated": len(rows),
+        "positives_evaluated": int(labels.sum()),
+        "shipped_threshold": threshold,
+        "classifier_oof_at_chosen_threshold (optimistic: threshold chosen on same rows)": best,
+        "classifier_sweep": sweep,
+        "keyword_screen_oof_rows": metrics(kw_pairs),
+        "pure_python_vs_sklearn_max_abs_diff": worst,
         "note": (
-            "Text is the RTI-Bench request field. Advisory runs on the citizen narrative, which "
-            "this model was not trained on. Its out-of-fold precision on RTI-Bench is about 0.2, "
-            "so it is advisory only and off by default (RTI_EXEMPTION_ADVISORY=1)."
+            "Advisory only, off by default (RTI_EXEMPTION_ADVISORY=1). At the chosen threshold, "
+            f"out-of-fold precision is {best['precision']} against a base rate of "
+            f"{round(float(labels.mean()), 3)}. The threshold was chosen on the same rows. "
+            "It was not validated on real citizen-style text."
         ),
     }
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     RESULTS.write_text(json.dumps(results, indent=2, ensure_ascii=False), encoding="utf-8")
     MODEL_PATH.parent.mkdir(parents=True, exist_ok=True)
-    MODEL_PATH.write_text(
-        json.dumps({"threshold": SHIPPED_THRESHOLD, "field": FIELD, **final_model}, ensure_ascii=False),
-        encoding="utf-8",
-    )
+    MODEL_PATH.write_text(json.dumps(model, ensure_ascii=False), encoding="utf-8")
 
-    print(f"rows evaluated: {len(oof)} (positives {results['positives_evaluated']})")
-    print("classifier OOF @0.4:", clf_shipped)
-    print("classifier best OOF sweep (optimistic):", best)
-    print("keyword screen OOF:", kw)
+    print(f"rows evaluated: {len(rows)} (positives {int(labels.sum())})")
+    print("threshold (best OOF F1, optimistic):", best)
+    print("keyword screen (same rows):", results["keyword_screen_oof_rows"])
+    print(f"pure-Python vs sklearn max abs diff: {worst:.2e}")
     print(f"Wrote {RESULTS} and {MODEL_PATH}")
     return 0
 

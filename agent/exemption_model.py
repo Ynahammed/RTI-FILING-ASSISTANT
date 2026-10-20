@@ -1,11 +1,13 @@
-"""Advisory Section 8(1)(j) classifier (pure-Python Naive Bayes).
+"""Advisory Section 8(1)(j) text classifier (pure-Python TF-IDF + logistic regression).
 
-Trained by scripts/train_8_1_j_classifier.py on RTI-Bench. Its output is advisory
-only: triage records a review note when the score clears the threshold, but it never
-changes the deterministic label and never blocks filing. It is OFF by default
-(opt in with RTI_EXEMPTION_ADVISORY=1). Its out-of-fold precision is about 0.2, and it
-is trained on the RTI draft text (information_sought) while triage scores the citizen's
-request text, so it must not be used as a gate.
+Trained by scripts/train_8_1_j_classifier.py on RTI-Bench. The weights are exported to
+rules/exemption_8_1_j_model.json and scored here with no scikit-learn dependency. Scores
+match scikit-learn's TfidfVectorizer + LogisticRegression (checked by the training script).
+
+Its output is advisory only: triage records a review note when the score clears the
+threshold, but it never changes the deterministic label and never blocks filing. Its
+out-of-fold precision on RTI-Bench is low (see artifacts/classifier_8_1_j_results.json),
+and it has not been validated on citizen-style text, so it must not be used as a gate.
 """
 
 from __future__ import annotations
@@ -14,6 +16,7 @@ import json
 import math
 import os
 import re
+from collections import Counter
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
@@ -23,28 +26,34 @@ from common import config
 MODEL_PATH = Path(
     os.getenv("RTI_EXEMPTION_MODEL", config.PROJECT_ROOT / "rules" / "exemption_8_1_j_model.json")
 )
-ALPHA = 1.0  # Laplace smoothing, must match the training script
-TOKEN = re.compile(r"[a-z0-9]+")
+NGRAM_RANGE = (1, 2)
+# Same token pattern as scikit-learn's default (single-character tokens are dropped).
+TOKEN = re.compile(r"(?u)\b\w\w+\b")
 
 
-def tokenize(text: str) -> list[str]:
-    return TOKEN.findall(text.lower())
+def ngrams(text: str) -> list[str]:
+    """Word unigrams and bigrams, joined with a space, as scikit-learn produces them."""
+    tokens = TOKEN.findall(text.lower())
+    grams = list(tokens)
+    if NGRAM_RANGE[1] >= 2:
+        grams.extend(" ".join(tokens[i : i + 2]) for i in range(len(tokens) - 1))
+    return grams
 
 
-def posterior(model: dict[str, Any], text: str) -> float:
+def probability(model: dict[str, Any], text: str) -> float:
     """Probability that the request matches the 8(1)(j) pattern in the training data."""
-    pos_counts = model["pos_counts"]
-    neg_counts = model["neg_counts"]
-    v = model["vocab_size"]
-    lp = model["log_prior_pos"]
-    ln = model["log_prior_neg"]
-    pt = model["pos_total"]
-    nt = model["neg_total"]
-    for tok in tokenize(text):
-        lp += math.log((pos_counts.get(tok, 0) + ALPHA) / (pt + ALPHA * v))
-        ln += math.log((neg_counts.get(tok, 0) + ALPHA) / (nt + ALPHA * v))
-    diff = ln - lp
-    return 1.0 / (1.0 + math.exp(max(-700.0, min(700.0, diff))))
+    vocab = model["vocabulary"]
+    idf = model["idf"]
+    coef = model["coef"]
+    counts = Counter(vocab[g] for g in ngrams(text) if g in vocab)
+    # Sublinear tf, then tf-idf weights, then L2 normalisation over in-vocabulary terms.
+    weights = {idx: (1.0 + math.log(tf)) * idf[idx] for idx, tf in counts.items()}
+    norm = math.sqrt(sum(w * w for w in weights.values()))
+    z = float(model["intercept"])
+    if norm:
+        z += sum((w / norm) * coef[idx] for idx, w in weights.items())
+    z = max(-700.0, min(700.0, z))
+    return 1.0 / (1.0 + math.exp(-z))
 
 
 @lru_cache(maxsize=1)
@@ -65,7 +74,7 @@ def advisory_flag(text: str) -> dict[str, float] | None:
     model = _load()
     if model is None:
         return None
-    score = posterior(model, text)
+    score = probability(model, text)
     threshold = float(model["threshold"])
     if score < threshold:
         return None

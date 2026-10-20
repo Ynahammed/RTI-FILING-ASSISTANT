@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import math
 
 import pytest
 
@@ -9,14 +8,12 @@ from agent import agents, db, exemption_model, llm
 
 
 def _tiny_model(threshold: float = 0.5) -> dict:
+    # "bank" pushes the logit up, "road" pushes it down, with unit idf and no intercept.
     return {
-        "pos_counts": {"bank": 5},
-        "neg_counts": {"road": 5},
-        "vocab_size": 2,
-        "log_prior_pos": math.log(0.5),
-        "log_prior_neg": math.log(0.5),
-        "pos_total": 5,
-        "neg_total": 5,
+        "vocabulary": {"bank": 0, "road": 1, "bank road": 2},
+        "idf": [1.0, 1.0, 1.0],
+        "coef": [4.0, -4.0, 0.0],
+        "intercept": 0.0,
         "threshold": threshold,
     }
 
@@ -32,14 +29,43 @@ def model_file(tmp_path, monkeypatch):
     exemption_model._load.cache_clear()
 
 
-def test_tokenize_lowercases_and_splits_on_non_alphanumerics():
-    assert exemption_model.tokenize("Bank-Account, 42!") == ["bank", "account", "42"]
+def test_ngrams_lowercase_and_add_bigrams():
+    grams = exemption_model.ngrams("Bank-Account, 42!")
+    assert grams == ["bank", "account", "42", "bank account", "account 42"]
 
 
-def test_posterior_is_higher_for_pattern_words(model_file):
+def test_ngrams_drop_single_character_tokens():
+    assert exemption_model.ngrams("a b cd") == ["cd"]
+
+
+def test_probability_is_higher_for_pattern_words():
     model = _tiny_model()
-    assert exemption_model.posterior(model, "bank") > 0.5
-    assert exemption_model.posterior(model, "road") < 0.5
+    assert exemption_model.probability(model, "bank") > 0.5
+    assert exemption_model.probability(model, "road") < 0.5
+
+
+def test_probability_is_neutral_for_out_of_vocabulary_text():
+    assert exemption_model.probability(_tiny_model(), "zebra") == pytest.approx(0.5)
+
+
+def test_probability_uses_sublinear_tf():
+    model = _tiny_model()
+    assert exemption_model.probability(model, "bank road") == pytest.approx(0.5, abs=1e-9)
+    # Sublinear tf: weight(bank) = 1 + ln 3, weight(road) = 1, and the in-vocabulary bigram
+    # "bank road" (zero coef) also enters the L2 norm. Raw tf would give about 0.918 here.
+    assert exemption_model.probability(model, "bank bank bank road") == pytest.approx(0.8502, abs=1e-3)
+
+
+def test_shipped_model_file_is_well_formed():
+    path = exemption_model.MODEL_PATH
+    if not path.exists():
+        pytest.skip("shipped model not present")
+    model = json.loads(path.read_text(encoding="utf-8"))
+    assert len(model["idf"]) == len(model["coef"]) == len(model["vocabulary"])
+    assert sorted(model["vocabulary"].values()) == list(range(len(model["vocabulary"])))
+    assert 0.0 < model["threshold"] < 1.0
+    score = exemption_model.probability(model, "How much was spent on the road repair contract?")
+    assert 0.0 <= score <= 1.0
 
 
 def test_advisory_flags_matching_text(model_file):
