@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RTI Pilot — agent dashboard</title>
+<link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">
+    <span class="mark" aria-hidden="true">RTI</span>
+    <div>
+      <h1>RTI Pilot</h1>
+      <p>An agent that plans, files and verifies a right-to-information request</p>
+    </div>
+  </div>
+  <div class="top-actions">
+    <span class="badge mock">MOCK PORTAL · SYNTHETIC DATA</span>
+    <a id="portal-link" class="ghost" href="#" target="_blank" rel="noopener">Open mock portal ↗</a>
+  </div>
+</header>
+
+<nav class="tabs" role="tablist" aria-label="Views">
+  <button class="tab active" data-view="assistant" role="tab" aria-selected="true">Assistant</button>
+  <button class="tab" data-view="review" role="tab" aria-selected="false">Review queue <span id="review-count" class="count" hidden>0</span></button>
+  <button class="tab" data-view="tracker" role="tab" aria-selected="false">Tracker</button>
+  <button class="tab" data-view="tests" role="tab" aria-selected="false">Test results</button>
+</nav>
+
+<main>
+  <section id="view-assistant" class="view">
+    <div class="grid">
+      <section class="panel chat" aria-label="Citizen chat">
+        <header class="panel-head">
+          <h2>Citizen chat</h2>
+          <button id="new-run" class="ghost small" type="button">New request</button>
+        </header>
+        <div id="messages" class="messages" aria-live="polite">
+          <div class="empty-state">
+            <strong>Tell me what you need to know.</strong>
+            <p>For example: “How much did the Public Works Department spend on repairing the road in Ward 12, Pune, during 2025-26?”</p>
+            <p class="hint">English, తెలుగు and हिन्दी are understood. Nothing is filed without your approval.</p>
+          </div>
+        </div>
+        <form id="chat-form" class="composer" autocomplete="off">
+          <label class="sr-only" for="chat-input">Your message</label>
+          <textarea id="chat-input" rows="3" placeholder="Describe what you need, and where."></textarea>
+          <div class="composer-row">
+            <label class="sr-only" for="language">Language</label>
+            <select id="language">
+              <option value="">Auto-detect</option>
+              <option value="en">English</option>
+              <option value="te">తెలుగు</option>
+              <option value="hi">हिन्दी</option>
+            </select>
+            <button type="submit" id="send-btn">Send</button>
+          </div>
+        </form>
+      </section>
+
+      <section class="panel timeline" aria-label="Reasoning trail">
+        <header class="panel-head">
+          <h2>Reasoning trail</h2>
+          <span id="status-chip" class="pill neutral">No run yet</span>
+        </header>
+        <div id="timeline" class="timeline">
+          <p class="empty-state small">Each agent step appears here with its decision, confidence, reason, rule and source.</p>
+        </div>
+        <details id="evidence-drawer" class="evidence" hidden>
+          <summary><span id="evidence-summary">Evidence ledger</span></summary>
+          <div id="evidence-list"></div>
+        </details>
+      </section>
+
+      <aside class="side" aria-label="Approval and result">
+        <div id="approval-card"></div>
+        <div id="result-card"></div>
+        <div id="meta-card"></div>
+      </aside>
+    </div>
+  </section>
+
+  <section id="view-review" class="view hidden">
+    <header class="view-head">
+      <div>
+        <h2>Review queue</h2>
+        <p>Requests stopped before drafting, usually because a Section 8 exemption fired.</p>
+      </div>
+      <button class="ghost" data-refresh="review" type="button">Refresh</button>
+    </header>
+    <div id="review-list" class="cards"></div>
+  </section>
+
+  <section id="view-tracker" class="view hidden">
+    <header class="view-head">
+      <div>
+        <h2>Tracker</h2>
+        <p>Deadlines, transfers and first appeals, read from the mock portal's clock.</p>
+      </div>
+      <div class="head-actions">
+        <span id="portal-clock" class="pill neutral">Mock clock —</span>
+        <a id="clock-link" class="ghost" href="#" target="_blank" rel="noopener">Advance clock in demo console ↗</a>
+        <button class="ghost" data-refresh="tracker" type="button">Refresh</button>
+      </div>
+    </header>
+    <div id="tracker-list" class="cards"></div>
+  </section>
+
+  <section id="view-tests" class="view hidden">
+    <header class="view-head">
+      <div>
+        <h2>Test results</h2>
+        <p>Every run stores its input, expected result, actual result and evidence. Failures stay visible.</p>
+      </div>
+      <div class="head-actions">
+        <button class="ghost" data-refresh="tests" type="button">Refresh</button>
+      </div>
+    </header>
+    <div id="tests-summary" class="tests-summary"></div>
+    <div id="tests-list" class="cards"></div>
+  </section>
+</main>
+
+<footer class="footer">
+  <span>Runs against a mock RTI portal. No real government system, payment or personal data is involved.</span>
+  <span id="footer-note"></span>
+</footer>
+
+<script src="/static/app.js"></script>
+</body>
+</html>

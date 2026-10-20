@@ -1,0 +1,36 @@
+# Render blueprint. Values marked sync:false must be entered in the dashboard.
+# Set the SAME RTI_APPROVAL_SECRET on both services.
+services:
+  - type: web
+    name: rti-pilot-portal
+    runtime: docker
+    plan: free
+    dockerContext: .
+    dockerfilePath: deploy/Dockerfile.portal
+    healthCheckPath: /healthz
+    envVars:
+      - key: RTI_APPROVAL_SECRET
+        sync: false
+      - key: RTI_ADMIN_TOKEN
+        sync: false
+      - key: RTI_DATA_DIR
+        value: /app/data
+
+  - type: web
+    name: rti-pilot-agent
+    runtime: docker
+    plan: free
+    dockerContext: .
+    dockerfilePath: deploy/Dockerfile.agent.free
+    healthCheckPath: /api/health
+    envVars:
+      - key: RTI_APPROVAL_SECRET
+        sync: false
+      - key: RTI_ADMIN_TOKEN
+        sync: false
+      - key: RTI_PORTAL_URL
+        sync: false
+      - key: RTI_DATA_DIR
+        value: /app/data
+      - key: RTI_FILING_MODE
+        value: http

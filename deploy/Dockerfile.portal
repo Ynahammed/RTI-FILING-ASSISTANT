@@ -1,0 +1,21 @@
+FROM python:3.12-slim
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    RTI_DATA_DIR=/app/data
+
+WORKDIR /app
+
+RUN pip install --no-cache-dir \
+    "fastapi>=0.110" \
+    "uvicorn[standard]>=0.27" \
+    "python-multipart>=0.0.9"
+
+COPY common ./common
+COPY portal ./portal
+COPY rules ./rules
+
+RUN mkdir -p /app/data
+EXPOSE 8001
+
+CMD ["sh", "-c", "uvicorn portal.main:app --host 0.0.0.0 --port ${PORT:-8001}"]

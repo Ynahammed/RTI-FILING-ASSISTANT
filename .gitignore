@@ -1,0 +1,14 @@
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+venv/
+data/
+artifacts/
+*.db
+*.db-wal
+*.db-shm
+.env
+.DS_Store
+deploy/.secrets.env
+deploy/.tokens/

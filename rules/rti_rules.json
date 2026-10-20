@@ -1,0 +1,52 @@
+{
+  "version": "2026-10-19",
+  "disclaimer": "Seeded assumptions for a mock-portal pilot. Verify every section and every state fee against the official RTI Act text (rti.gov.in) before any real filing.",
+  "sections": {
+    "6(3)": {
+      "title": "Transfer of application",
+      "rule": "If the PIO does not hold the records, the application is transferred to the public authority that does, within five days.",
+      "transfer_days": 5
+    },
+    "7(1)": {
+      "title": "Response period",
+      "rule": "Records are supplied within thirty days; where the request concerns the life or liberty of a person, within forty-eight hours.",
+      "normal_days": 30,
+      "life_liberty_hours": 48
+    },
+    "8(1)(j)": {
+      "title": "Personal information exemption",
+      "rule": "Information that is personal to a third party and unrelated to any public activity or interest is exempt unless the PIO is satisfied the larger public interest justifies disclosure.",
+      "blocks_filing_pending_review": true
+    },
+    "19": {
+      "title": "First appeal",
+      "rule": "A first appeal lies to the first appellate authority within thirty days of the response period expiring, or of receiving a reply.",
+      "appeal_window_days": 30
+    },
+    "fee": {
+      "title": "Application fee",
+      "default_inr": 10,
+      "bpl_exempt": true,
+      "rule": "A fee of ten rupees accompanies the application; applicants below the poverty line are exempt. State variations are seeded assumptions, not verified law."
+    }
+  },
+  "exemptions": [
+    {"ref": "8(1)(a)", "summary": "National security, sovereignty and integrity"},
+    {"ref": "8(1)(b)", "summary": "Contempt of court or breach of parliamentary privilege"},
+    {"ref": "8(1)(d)", "summary": "Commercial confidence and trade secrets"},
+    {"ref": "8(1)(e)", "summary": "Information held in fiduciary relationship"},
+    {"ref": "8(1)(g)", "summary": "Danger to life or physical safety of any person"},
+    {"ref": "8(1)(h)", "summary": "Impedes investigation, prosecution or apprehension of offenders"},
+    {"ref": "8(1)(j)", "summary": "Personal information of a third party with no public interest"}
+  ],
+  "state_assumptions": {
+    "Maharashtra": {"fee_inr": 10, "seeded": true},
+    "Telangana": {"fee_inr": 10, "seeded": true},
+    "Karnataka": {"fee_inr": 10, "seeded": true},
+    "Central": {"fee_inr": 10, "seeded": true}
+  },
+  "routing": {
+    "confidence_threshold": 0.7,
+    "rule": "Decide central versus state first, then the department, then the PIO. Below the threshold, ask the citizen instead of guessing."
+  }
+}
