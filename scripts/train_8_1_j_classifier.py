@@ -117,7 +117,8 @@ def main() -> int:
         "keyword_screen": {"oof_pooled_rows": kw},
         "note": (
             "Text is the RTI-Bench request field. Advisory runs on the citizen narrative, which "
-            "this model was not trained on; see README/report for the transfer check."
+            "this model was not trained on. Its out-of-fold precision on RTI-Bench is about 0.2, "
+            "so it is advisory only and off by default (RTI_EXEMPTION_ADVISORY=1)."
         ),
     }
     OUT_DIR.mkdir(parents=True, exist_ok=True)
