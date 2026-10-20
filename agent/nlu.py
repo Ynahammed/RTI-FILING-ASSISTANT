@@ -131,11 +131,18 @@ PERSONAL_TERMS = [
     "family details", "personal details", "personal information",
     "ఫోన్ నంబర్", "చిరునామా", "వ్యక్తిగత వివరాలు", "జీతం",
     "फोन नंबर", "निजी पता", "व्यक्तिगत जानकारी", "वेतन",
+    # Third-party records as they are phrased in applicants' requests (RTI-Bench).
+    "bank account", "account of", "accounts of", "fixed deposit", "fdr", "pension", "salary",
+    "insurance policy", "insurance policies", "passport", "telephone", "telephone number",
+    "medical record", "patient", "treatment given", "tax return", "income tax return",
+    "deceased", "bank statement",
 ]
 
 PERSON_TERMS = [
     "officer", "employee", "person", "individual", "applicant", "engineer", "clerk",
-    "ward officer", "third party", "official",
+    "ward officer", "third party",    "official",
+    "particular person", "certain person", "a certain", "his son", "her son",
+    "husband", "wife", "daughter", "someone", "account holder", "imposter",
     "అధికారి", "ఉద్యోగి", "వ్యక్తి", "अधिकारी", "कर्मचारी", "व्यक्ति",
 ]
 

@@ -10,7 +10,7 @@ import re
 import sqlite3
 from typing import Any
 
-from agent import db, llm, nlu, registry, rules
+from agent import db, exemption_model, llm, nlu, registry, rules
 from common import config
 
 GRIEVANCE_URL = f"{config.PORTAL_URL}/grievance"
@@ -162,6 +162,16 @@ def triage(conn: sqlite3.Connection, run_id: str, parsed: dict[str, Any]) -> dic
             conn, run_id, source_id="RULE-mixed", source_url=GRIEVANCE_URL,
             extracted_value="Mixed request split into a grievance redirect and an RTI records request.",
             source="rules", kind="split",
+        )
+
+    flag = exemption_model.advisory_flag(parsed.get("information_needed", ""))
+    if flag and label != "exempt":
+        db.add_decision(
+            conn, run_id, "exemption_advisory", "advisory", _fmt_confidence(flag["score"]),
+            "A classifier trained on RTI-Bench flags possible Section 8(1)(j) personal data in this request. "
+            "Advisory only: the deterministic label stands, filing is not blocked, and a PIO should check "
+            "before any release.",
+            "8(1)(j) advisory", {"score": round(flag["score"], 4), "threshold": flag["threshold"]},
         )
 
     suggestion = llm.review_triage(parsed.get("clean_text", ""), label)
