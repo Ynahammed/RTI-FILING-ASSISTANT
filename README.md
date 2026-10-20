@@ -204,19 +204,30 @@ and stored in the `test_results` table, visible on the dashboard's **Test result
 
 ## Deployment
 
-Both services ship as Docker images. The blueprint is
-[deploy/render.yaml](deploy/render.yaml); the same Dockerfiles work on Railway or Fly.
+The Render blueprint is [deploy/render.yaml](deploy/render.yaml). The public services
+are:
 
-1. Deploy the portal with `deploy/Dockerfile.portal`, then the agent with
-   `deploy/Dockerfile.agent`.
-2. Set the same `RTI_APPROVAL_SECRET` on both services. Set `RTI_ADMIN_TOKEN` on the
-   portal and on the agent (the agent uses it only for the demo operator handoff).
-3. Set `RTI_PORTAL_URL` on the agent to the portal's public URL.
-4. Mount a persistent volume at `/app/data` if you want the SQLite files to survive
-   restarts. Without one, a redeploy starts with an empty demo.
+| Service | URL |
+|---|---|
+| Mock portal | <https://rti-pilot-portal.onrender.com> |
+| Agent + dashboard | <https://rti-pilot-agent.onrender.com> |
 
-Deployment is not performed by this repository. Running `sites_deploy`, a cloud
-platform CLI or a paid plan requires your own account and explicit authorization.
+The Render Free configuration uses `deploy/Dockerfile.portal` for the portal and
+`deploy/Dockerfile.agent.free` for the agent. It sets `RTI_FILING_MODE=http`, so the
+hosted demo uses the portal API rather than launching Chromium; local runs can still
+use Playwright.
+
+Both services must have the same `RTI_APPROVAL_SECRET` and `RTI_ADMIN_TOKEN`. The
+agent's `RTI_PORTAL_URL` must be set to `https://rti-pilot-portal.onrender.com`.
+
+**Free-tier caveats:** SQLite files live on ephemeral storage and may be reset when a
+service restarts, redeploys, or spins down. Free services sleep after inactivity and
+take time to wake; the workspace's free instance-hours are shared between services.
+Use this deployment for demos/evaluation, not durable storage or always-on service.
+For Render setup details, see [deploy/README.md](deploy/README.md).
+
+The URLs above were provided for this README; this document does not claim that a
+live health check or full deployed evaluation has been completed.
 
 ---
 
@@ -232,8 +243,8 @@ platform CLI or a paid plan requires your own account and explicit authorization
 - **SQLite on a single instance.** Fine for a demo; two replicas would diverge.
 - **The portal's CAPTCHA is a placeholder**, not a real challenge. That is intentional:
   automated solving is out of scope.
-- **Deployment configs are provided but not executed.** No public URLs exist until you
-  deploy with your own accounts.
+- **Public Render URLs are listed above.** Their availability and the full deployed
+  evaluation have not been verified here.
 - **Voice input is not built** (first item in the plan's cut order).
 
 ## Security notes
