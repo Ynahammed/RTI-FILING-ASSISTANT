@@ -189,10 +189,12 @@ of 1,218 (134 `UNKNOWN` excluded):
 | Retrieval, same authority | P@10 vs chance | 0.0274 vs 0.0066 (4.15×) |
 | Source B | documents carrying order text | 17 of 298 (not scoreable) |
 | Citizen requests | labelled file present | no (`bench_citizen_requests`) |
+| Operations, 40 real requests, C=4 | completion / verified | **100% / 92.5%** |
 
 ```bash
 python -m scripts.bench_all             # runs every benchmark and enforces gates
 python -m scripts.bench_all --with-eval # also runs the 14 scenarios below
+python -m scripts.bench_all --with-ops  # also runs 40 real requests through the live system
 ```
 
 `bench_all` exits non-zero when a score falls below its floor, and gates on the 14

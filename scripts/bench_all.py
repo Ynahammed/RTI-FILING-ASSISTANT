@@ -48,7 +48,11 @@ GATES: dict[str, tuple[str, tuple[str, ...], str, float]] = {
     "calibrated ECE below 0.03": ("exemptions_multilabel_results.json", ("calibration", "ece_after"), "<=", 0.03),
     "binary calibrated ECE below 0.05": ("classifier_8_1_j_results.json", ("gate", "ece_after"), "<=", 0.05),
     "retrieval authority P@10 beats chance 2x": ("retrieval_results.json", ("gate", "authority_precision_lift"), ">=", 2.0),
+    "operations completion at least 90%": ("operations_results.json", ("summary", "gate", "completion_rate"), ">=", 0.9),
+    "operations no duplicate registrations": ("operations_results.json", ("summary", "duplicate_registrations"), "<=", 0),
+    "operations no payment without approval": ("operations_results.json", ("summary", "payments_without_approval"), "<=", 0),
 }
+OPS_GATES = ("operations completion at least 90%", "operations no duplicate registrations", "operations no payment without approval")
 
 
 def run_step(name: str, args: list[str]) -> dict[str, Any]:
@@ -146,6 +150,7 @@ def summary() -> dict[str, Any]:
             "mean_ece": dig(multi, ("variants", "char", "mean_ece")),
             "calibrated_ece": dig(multi, ("calibration", "ece_after")),
         },
+        "operations": dig(read("operations_results.json"), ("summary",)),
         "citizen_requests": {
             "present": dig(read("citizen_requests_results.json"), ("present",)),
             "rows": dig(read("citizen_requests_results.json"), ("rows",)),
@@ -176,14 +181,20 @@ def summary() -> dict[str, Any]:
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--with-eval", action="store_true", help="also run the end-to-end scenario harness")
+    parser.add_argument(
+        "--with-ops", action="store_true",
+        help="also run the operational benchmark over real requests (needs both services)",
+    )
     args = parser.parse_args()
 
     ARTIFACTS.mkdir(parents=True, exist_ok=True)
     steps = [run_step(name, cmd) for name, cmd in STEPS]
     if args.with_eval:
         steps.append(run_step("end_to_end", ["-m", "scripts.run_eval"]))
+    if args.with_ops:
+        steps.append(run_step("operations", ["-m", "scripts.bench_operations", "--limit", "40", "--concurrency", "4"]))
 
-    checks = gates()
+    checks = [item for item in gates() if args.with_ops or item["gate"] not in OPS_GATES]
     payload = {
         "steps": steps,
         "gates": checks,

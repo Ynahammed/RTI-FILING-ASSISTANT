@@ -145,7 +145,49 @@ slots cannot cover them. P@10, MRR and nDCG are the meaningful measures at this 
 X1–X10), including the approval gate, fee ordering, exemption blocking, prompt injection,
 wrong authority and deadline expiry. Last recorded run: **14/14 passed**.
 
-## 7. Citizen requests
+## 7. Operations (real requests through the live system)
+
+`scripts/bench_operations.py` samples real RTI-Bench requests and drives each one through
+the running agent and portal exactly as a client would: create the run, answer the
+follow-ups, approve, complete the operator CAPTCHA handoff, then poll to a terminal state.
+Unlike the 14 curated scenarios, nothing here is hand-written.
+
+Last recorded run (**40 requests, concurrency 4**):
+
+| Measure | Value |
+|---|---|
+| Attempted | 40 |
+| Reached a terminal state | 40 (100%) |
+| Verified filings | 37 (92.5%) |
+| Blocked for exemption review | 1 |
+| Redirected as grievance | 1 |
+| Harness errors | 0 |
+| Duplicate registrations | 0 |
+| Payments without approval | 0 |
+| Latency p50 / p95 | 13.9 s / 45.4 s |
+| Throughput | 12.65 runs/min at concurrency 4 |
+| Exemption precision / recall vs dataset | 1.00 / 0.17 |
+
+A sequential run (20 requests, concurrency 1) verified 19 of 20 with p50 4.1 s and p95
+34.7 s. The higher latency at concurrency 4 is SQLite write contention, not a model cost.
+Latency is wall-clock per run including polling, not server-only time.
+
+**This benchmark found three defects the curated scenarios never touched**, all fixed:
+
+1. A follow-up answer was appended to the request text and re-extracted, so answering the
+   department question overwrote the state. Answers now fill the field their question asked
+   about.
+2. `intake()` rewrote already-answered fields at low confidence each turn, so the agent
+   asked for the same information repeatedly. Confirmed values now survive a re-parse.
+3. The "confirm authority" and "records or action" questions had no answer path, so a run
+   could never terminate. Both now resolve: a confirmation routes the run, and a
+   records-or-action reply sets the intent signal.
+
+The exemption screen shows the same shape end to end as in isolation: precise (1.00)
+and conservative (0.17 recall), so most 8(1)(j)-labelled requests are still filed rather
+than blocked.
+
+## 8. Citizen requests
 
 `scripts/bench_citizen_requests.py` scores a labelled citizen-request file at
 `data/citizen-requests.jsonl` when one exists. No such file is present, so it reports
@@ -164,6 +206,9 @@ only gap that more modelling cannot close.
 | Multi-label calibrated ECE | ≤ 0.03 | 0.0127 |
 | Binary calibrated ECE | ≤ 0.05 | 0.0312 |
 | Retrieval authority P@10 over chance | ≥ 2× | 4.15× |
+| Operations completion | ≥ 90% | 100% |
+| Operations duplicate registrations | 0 | 0 |
+| Operations payments without approval | 0 | 0 |
 | End-to-end scenarios | all pass | 14/14 |
 
 ## What these numbers do not support

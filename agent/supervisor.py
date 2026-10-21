@@ -51,6 +51,25 @@ def _deadline_display(raw: str | None) -> str:
     return dt.strftime("%d %b %Y")
 
 
+def _normalise_answer(field: str, answer: str) -> str | None:
+    """Map a free-text follow-up answer onto the value the field expects."""
+    text = nlu.normalise(answer)
+    if not text:
+        return None
+    if field == "state":
+        for state, keywords in nlu.STATE_KEYWORDS.items():
+            if text == nlu.normalise(state) or any(word in text for word in keywords):
+                return state
+        return None
+    if field == "department":
+        for department, keywords in nlu.DEPARTMENT_KEYWORDS.items():
+            spelled = department.replace("_", " ")
+            if text in {department, spelled} or any(word in text for word, _ in keywords):
+                return department
+        return None
+    return answer.strip()
+
+
 def _advance(run_id: str, answer: str | None = None) -> dict[str, Any]:
     with _lock(run_id):
         conn = db.connect()
@@ -59,28 +78,64 @@ def _advance(run_id: str, answer: str | None = None) -> dict[str, Any]:
             if run["status"] in TERMINAL or run["status"] in {"filed", "filed_unverified", "verified", "tracking", "awaiting_captcha"}:
                 return db.run_detail(conn, run_id)
 
+            pending = run["missing_evidence"] if answer else None
             if answer:
                 db.add_message(conn, run_id, "user", answer)
-                combined = run["raw_input"] + "\n" + answer
-            else:
-                combined = run["raw_input"]
+            # The answer fills the field its question asked about. Appending it to the
+            # request and re-extracting put it in whichever field matched first, which
+            # overwrote state when the citizen answered about the department.
+            combined = run["raw_input"]
 
             # 1. Intake -------------------------------------------------------
             if run["status"] in {"intake", "awaiting_input"}:
+                # Values the citizen already confirmed survive a re-parse of the original
+                # text, which on its own still looks incomplete.
+                prior = {
+                    row["name"]: row["value"]
+                    for row in conn.execute(
+                        "SELECT name, value FROM fields WHERE run_id=? AND source='user' "
+                        "AND confidence>=0.95", (run_id,)
+                    )
+                }
                 intake = agents.intake(conn, run_id, combined, run["language"])
                 parsed = intake["parsed"]
+                missing = list(intake["missing"])
                 if parsed["injection"]:
                     _message_once(conn, run_id, messages.t("injection", run["language"]))
-                if intake["missing"]:
-                    missing = intake["missing"][0]
+                for name, value in prior.items():
+                    db.add_field(conn, run_id, name, value, 0.95, "user")
+                    parsed[name] = value
+                    missing = [field for field in missing if field != name]
+                if pending == "confirm_authority" and answer:
+                    reply = nlu.normalise(answer)
+                    candidate = conn.execute(
+                        "SELECT value FROM fields WHERE run_id=? AND name='authority_candidate'",
+                        (run_id,),
+                    ).fetchone()
+                    if candidate and reply.startswith(("yes", "y ", "confirm", "correct", "ok")):
+                        db.add_field(conn, run_id, "authority_confirmed", candidate["value"], 0.95, "user")
+                elif pending == "intent" and answer:
+                    # The uncertainty question asks records-or-action; the reply decides it.
+                    reply = nlu.normalise(answer)
+                    if any(word in reply for word in ("record", "copy", "document", "information", "file")):
+                        parsed["records_signal"] = True
+                        parsed["action_signal"] = False
+                elif pending and answer:
+                    value = _normalise_answer(pending, answer)
+                    if value:
+                        db.add_field(conn, run_id, pending, value, 0.95, "user")
+                        parsed[pending] = value
+                        missing = [name for name in missing if name != pending]
+                if missing:
+                    field = missing[0]
                     key = {
                         "information_needed": "ask_information_needed",
                         "state": "ask_state",
                         "department": "ask_department",
-                    }[missing]
+                    }[field]
                     question = messages.t(key, run["language"])
                     db.set_run_fields(conn, run_id, pending_question=question)
-                    db.set_status(conn, run_id, "awaiting_input", missing=missing)
+                    db.set_status(conn, run_id, "awaiting_input", missing=field)
                     _message_once(conn, run_id, question)
                     return db.run_detail(conn, run_id)
                 db.set_run_fields(conn, run_id, pending_question=None)
@@ -166,13 +221,34 @@ def _advance(run_id: str, answer: str | None = None) -> dict[str, Any]:
                 route = {"uncertain": False, "authority": authority, "confidence": routing_row["confidence"]}
 
             if route.get("uncertain"):
-                question = messages.t("ask_department", run["language"])
-                if route.get("missing") == "state":
-                    question = messages.t("ask_state", run["language"])
-                db.set_run_fields(conn, run_id, pending_question=question)
-                db.set_status(conn, run_id, "awaiting_input", missing=route.get("missing"))
-                _message_once(conn, run_id, question)
-                return db.run_detail(conn, run_id)
+                # A citizen who already confirmed the suggested office goes straight through.
+                confirmed = conn.execute(
+                    "SELECT value FROM fields WHERE run_id=? AND name='authority_confirmed'",
+                    (run_id,),
+                ).fetchone()
+                candidate = route.get("authority") or {}
+                if confirmed and candidate and confirmed["value"] == candidate.get("code"):
+                    db.add_decision(
+                        conn, run_id, "routing", "routed", 0.9,
+                        f"Citizen confirmed {candidate.get('name')} ({candidate.get('code')}) after the "
+                        "confidence check, so the recommendation was accepted rather than guessed.",
+                        "6(1)", {"authority": candidate.get("code"), "confirmed": True},
+                    )
+                    route = {"uncertain": False, "authority": candidate, "confidence": 0.9}
+                else:
+                    question = messages.t("ask_department", run["language"])
+                    if route.get("missing") == "state":
+                        question = messages.t("ask_state", run["language"])
+                    elif route.get("missing") == "confirm_authority" and candidate:
+                        db.add_field(conn, run_id, "authority_candidate", candidate.get("code", ""), 0.99, "agent")
+                        question = (
+                            f"Did you mean {candidate.get('name')} ({candidate.get('code')})? "
+                            "Reply yes to confirm."
+                        )
+                    db.set_run_fields(conn, run_id, pending_question=question)
+                    db.set_status(conn, run_id, "awaiting_input", missing=route.get("missing"))
+                    _message_once(conn, run_id, question)
+                    return db.run_detail(conn, run_id)
 
             # Demo override used by the evaluation harness (X8): file to the
             # wrong authority on purpose to show the Section 6(3) transfer.
