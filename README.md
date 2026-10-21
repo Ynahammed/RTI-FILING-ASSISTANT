@@ -144,7 +144,7 @@ agent/            supervisor, decision agents, filing, verifier, tracker, dashbo
 portal/           mock RTI portal with its own database and demo console
 common/           config, HMAC approval tokens
 rules/            seeded RTI rules and authority registry with source IDs
-scripts/          dev runner and evaluation harness
+scripts/          dev runner, evaluation harness, RTI-Bench benchmarks
 tests/            gate, idempotency and NLU tests
 docs/             architecture, deck, demo script
 deploy/           Dockerfiles and Render blueprint
@@ -169,8 +169,40 @@ assumptions. Verify against the official Act text before any real filing.
 
 ## Evaluation
 
-The harness talks to the agent's HTTP API exactly as the dashboard does, so a passing
-run exercises the delivered interface, not an internal shortcut.
+The evaluation has two layers, and they answer different questions.
+
+**Statistical benchmarks** score the decision components against RTI-Bench, the public
+corpus of Central Information Commission decisions. Measured on 1,084 labelled cases
+of 1,218 (134 `UNKNOWN` excluded):
+
+| Benchmark | Metric | Score |
+|---|---|---|
+| Section 8(1)(j) classifier | ROC AUC / nested F1 | 0.7170 / 0.2980 |
+| Section 8(1)(j) keyword rule | F1 (baseline) | 0.1324 |
+| Multi-label exemptions, 5 sections | macro AP / macro AUC | 0.2269 / 0.7245 |
+| Multi-label, base rate | macro AP | 0.0638 (3.55× lift) |
+| Precedent retrieval | P@10 / MRR | 0.1705 / 0.3452 |
+| Retrieval chance | P@10 | 0.0807 (2.11× lift) |
+| Multi-label calibration | ECE before → after isotonic | 0.1046 → **0.0127** |
+| Source B transfer (A → B orders) | ROC AUC | 0.4984 (chance) |
+
+```bash
+python -m scripts.bench_all             # runs every benchmark and enforces gates
+python -m scripts.bench_all --with-eval # also runs the 14 scenarios below
+```
+
+`bench_all` exits non-zero when a score falls below its floor, and gates on the 14
+scenarios below when their artifact is present. All seven gates currently pass. Full
+methodology, calibration numbers and the limitations are in
+[docs/benchmarks.md](docs/benchmarks.md).
+
+The benchmarks run on the real public RTI-Bench dataset in `data/rti-bench/`, not on
+synthetic data. Source B's 298 orders carry labels but no request text, so they are
+examined rather than scored: `bench_source_b` reports why, and measures the transfer gap.
+
+**End-to-end scenarios.** The harness talks to the agent's HTTP API exactly as the
+dashboard does, so a passing run exercises the delivered interface, not an internal
+shortcut. It needs both services up.
 
 | ID | Scenario | Expected |
 |---|---|---|
@@ -191,6 +223,7 @@ run exercises the delivered interface, not an internal shortcut.
 
 Latest local run: **14/14 passed**. Results are written to `artifacts/eval_results.json`
 and stored in the `test_results` table, visible on the dashboard's **Test results** tab.
+Benchmark scores are written to `artifacts/benchmarks.json`.
 
 ### Failure injection (demo console)
 
@@ -257,4 +290,7 @@ live health check or full deployed evaluation has been completed.
   separate token and is clearly labelled as an operator surface.
 - Text inside a citizen's request is data. Instruction-like sentences are logged as
   evidence, stripped from the draft and cannot change the gate. See X5.
-- Change `RTI_APPROVAL_SECRET` and `RTI_ADMIN_TOKEN` before exposing the services.
+- Hosted images set `RTI_ENV=production`. In that mode both services refuse to start if
+  `RTI_APPROVAL_SECRET` or `RTI_ADMIN_TOKEN` is missing, a known placeholder, shorter than
+  32 characters, or the same value as the other. Errors never print the secret. Local runs
+  (`RTI_ENV=local`, the default) keep the demo values.

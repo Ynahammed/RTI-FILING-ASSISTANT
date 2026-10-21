@@ -26,10 +26,40 @@ PORTAL_PORT = int(os.getenv("RTI_PORTAL_PORT", "8001"))
 PORTAL_URL = os.getenv("RTI_PORTAL_URL", f"http://{PORTAL_HOST}:{PORTAL_PORT}").rstrip("/")
 AGENT_URL = os.getenv("RTI_AGENT_URL", f"http://{AGENT_HOST}:{AGENT_PORT}").rstrip("/")
 
+# local (default) uses the demo secrets below. production refuses to start unless both
+# secrets are set, strong, and not one of the known placeholders.
+ENV = os.getenv("RTI_ENV", "local").strip().lower()
+if ENV not in ("local", "production"):
+    raise RuntimeError("RTI_ENV must be 'local' or 'production'")
+
+DEMO_APPROVAL_SECRET = "rti-pilot-demo-secret-change-me"
+DEMO_ADMIN_TOKEN = "rti-demo-admin"
+PLACEHOLDER_SECRETS = frozenset(
+    {DEMO_APPROVAL_SECRET, DEMO_ADMIN_TOKEN, "replace-with-a-long-random-value"}
+)
+MIN_SECRET_LENGTH = 32
+
+
+def _secret(name: str, demo_value: str) -> str:
+    value = os.getenv(name, "").strip()
+    if ENV != "production":
+        return value or demo_value
+    # Never include the value itself in an error message.
+    if not value:
+        raise RuntimeError(f"{name} must be set when RTI_ENV=production")
+    if value in PLACEHOLDER_SECRETS:
+        raise RuntimeError(f"{name} is a known placeholder; set a unique random value")
+    if len(value) < MIN_SECRET_LENGTH:
+        raise RuntimeError(f"{name} must be at least {MIN_SECRET_LENGTH} characters")
+    return value
+
+
 # Shared secret used to sign approval tokens. The portal verifies signatures;
 # it never reads the agent database.
-APPROVAL_SECRET = os.getenv("RTI_APPROVAL_SECRET", "rti-pilot-demo-secret-change-me")
-ADMIN_TOKEN = os.getenv("RTI_ADMIN_TOKEN", "rti-demo-admin")
+APPROVAL_SECRET = _secret("RTI_APPROVAL_SECRET", DEMO_APPROVAL_SECRET)
+ADMIN_TOKEN = _secret("RTI_ADMIN_TOKEN", DEMO_ADMIN_TOKEN)
+if ENV == "production" and APPROVAL_SECRET == ADMIN_TOKEN:
+    raise RuntimeError("RTI_APPROVAL_SECRET and RTI_ADMIN_TOKEN must differ")
 
 # auto | playwright | http
 FILING_MODE = os.getenv("RTI_FILING_MODE", "auto").lower()

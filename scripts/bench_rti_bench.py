@@ -20,6 +20,10 @@ from agent import nlu
 DATA = Path("data/rti-bench/hf_annotated.csv")
 OUT = Path("artifacts/rti_bench_results.json")
 FIELDS = ("information_sought", "instruction")
+# `instruction` quotes the PIO reply and the decision, which name 8(1)(j) in most positives.
+# Scores on it measure label leakage, not the screen, so they are never a real result.
+LEAKY_FIELDS = {"instruction"}
+LEAKY_NOTE = "label leakage: field quotes the decision; not a real result"
 EXAMPLES = 10
 
 
@@ -62,6 +66,8 @@ def run_field(rows: list[dict[str, str]], field: str) -> dict[str, object]:
             tn += 1
     return {
         "field": field,
+        "leaky": field in LEAKY_FIELDS,
+        "note": LEAKY_NOTE if field in LEAKY_FIELDS else "",
         **metrics(tp, fp, fn, tn),
         "sample_misses": misses,
         "sample_false_alarms": false_alarms,
@@ -85,9 +91,10 @@ def main() -> int:
     print(f"Scored {results['rows_scored']} cases (excluded {results['rows_excluded_unknown']} UNKNOWN)")
     print(f"Cases citing 8(1)(j): {results['positives_8_1_j']}")
     for entry in results["fields"]:
+        tag = " LEAKY: " + LEAKY_NOTE if entry["leaky"] else ""
         print(
             f"[{entry['field']}] tp={entry['tp']} fp={entry['fp']} fn={entry['fn']} tn={entry['tn']} "
-            f"precision={entry['precision']} recall={entry['recall']} f1={entry['f1']}"
+            f"precision={entry['precision']} recall={entry['recall']} f1={entry['f1']}{tag}"
         )
     print(f"Wrote {OUT}")
     return 0

@@ -14,7 +14,7 @@ The shipped model is trained on all scored rows. Its weights are written to rule
 scored in pure Python (agent/exemption_model.py), so the app needs no scikit-learn. This
 script checks that the pure-Python scores match scikit-learn on every row before it writes.
 
-Training needs scikit-learn, which is not in requirements.txt. Install it to retrain.
+Training needs scikit-learn, listed in requirements-dev.txt. Install it to retrain.
 Usage (project root, after downloading the dataset to data/rti-bench):
     python -m scripts.train_8_1_j_classifier
 """
@@ -29,6 +29,7 @@ from typing import Any
 import numpy as np
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import average_precision_score, roc_auc_score
 
 from agent import nlu
 from agent.exemption_model import MODEL_PATH, NGRAM_RANGE, probability
@@ -74,6 +75,38 @@ def export(vec: TfidfVectorizer, clf: LogisticRegression, threshold: float) -> d
     }
 
 
+def oof_scores_for(rows: list[dict[str, str]]) -> np.ndarray:
+    """Out-of-fold probabilities, one per row, using the rows' precomputed `fold` labels."""
+    scores = np.zeros(len(rows))
+    for k in range(5):
+        idx = [i for i, r in enumerate(rows) if r["fold"] == str(k)]
+        if not idx:
+            continue
+        vec, clf = fit([r for r in rows if r["fold"] != str(k)])
+        scores[idx] = clf.predict_proba(vec.transform([text_of(rows[i]) for i in idx]))[:, 1]
+    return scores
+
+
+def best_threshold(scores: np.ndarray, labels: np.ndarray) -> float:
+    return max(THRESHOLDS, key=lambda t: metrics(list(zip(scores >= t, labels)))["f1"])
+
+
+def nested_evaluation(rows: list[dict[str, str]]) -> dict[str, Any]:
+    """Honest threshold estimate: each outer fold picks its threshold from inner folds only."""
+    pooled: list[tuple[bool, bool]] = []
+    chosen: list[float] = []
+    for k in range(5):
+        outer_train = [r for r in rows if r["fold"] != str(k)]
+        outer_test = [r for r in rows if r["fold"] == str(k)]
+        inner_labels = np.array([r["label"] == "1" for r in outer_train])
+        t = best_threshold(oof_scores_for(outer_train), inner_labels)
+        vec, clf = fit(outer_train)
+        s = clf.predict_proba(vec.transform([text_of(r) for r in outer_test]))[:, 1]
+        pooled.extend(zip(s >= t, [r["label"] == "1" for r in outer_test]))
+        chosen.append(t)
+    return {"threshold_per_outer_fold": chosen, "pooled_metrics": metrics(pooled)}
+
+
 def metrics(pairs: list[tuple[bool, bool]]) -> dict[str, float | int]:
     pairs = [(bool(p), bool(a)) for p, a in pairs]
     tp = sum(p and a for p, a in pairs)
@@ -97,14 +130,8 @@ def main() -> int:
         r["label"] = "1" if "8(1)(j)" in (r["exemptions_cited"] or "") else "0"
         r["fold"] = str(int(r["hf_id"]) % 5)
 
-    oof_scores = np.zeros(len(rows))
+    oof_scores = oof_scores_for(rows)
     labels = np.array([r["label"] == "1" for r in rows])
-    for k in range(5):
-        train_idx = [i for i, r in enumerate(rows) if r["fold"] != str(k)]
-        test_idx = [i for i, r in enumerate(rows) if r["fold"] == str(k)]
-        vec, clf = fit([rows[i] for i in train_idx])
-        x_test = vec.transform([text_of(rows[i]) for i in test_idx])
-        oof_scores[test_idx] = clf.predict_proba(x_test)[:, 1]
 
     sweep = [
         {"threshold": t, **metrics(list(zip(oof_scores >= t, labels)))}
@@ -112,8 +139,12 @@ def main() -> int:
     ]
     best = max(sweep, key=lambda m: m["f1"])
     threshold = float(best["threshold"])
+    nested = nested_evaluation(rows)
 
     kw_pairs = [(nlu.has_personal_data(r["information_sought"] or ""), r["label"] == "1") for r in rows]
+    kw = metrics(kw_pairs)
+    auc = float(roc_auc_score(labels, oof_scores))
+    ap = float(average_precision_score(labels, oof_scores))
     vec, clf = fit(rows)
     model = export(vec, clf, threshold)
 
@@ -136,12 +167,19 @@ def main() -> int:
         "shipped_threshold": threshold,
         "classifier_oof_at_chosen_threshold (optimistic: threshold chosen on same rows)": best,
         "classifier_sweep": sweep,
-        "keyword_screen_oof_rows": metrics(kw_pairs),
+        "nested_threshold_evaluation": nested,
+        "keyword_screen_oof_rows": kw,
+        "gate": {
+            "roc_auc": round(auc, 4),
+            "avg_precision": round(ap, 4),
+            "f1_lift": round(float(nested["pooled_metrics"]["f1"]) - float(kw["f1"]), 4),
+        },
         "pure_python_vs_sklearn_max_abs_diff": worst,
         "note": (
             "Advisory only, off by default (RTI_EXEMPTION_ADVISORY=1). At the chosen threshold, "
-            f"out-of-fold precision is {best['precision']} against a base rate of "
-            f"{round(float(labels.mean()), 3)}. The threshold was chosen on the same rows. "
+            f"out-of-fold precision at the optimistic threshold is {best['precision']} and "
+            f"nested (honest) precision is {nested['pooled_metrics']['precision']}, against a base "
+            f"rate of {round(float(labels.mean()), 3)}. "
             "It was not validated on real citizen-style text."
         ),
     }
@@ -152,7 +190,9 @@ def main() -> int:
 
     print(f"rows evaluated: {len(rows)} (positives {int(labels.sum())})")
     print("threshold (best OOF F1, optimistic):", best)
+    print(f"threshold-free: ROC AUC={auc:.4f} average precision={ap:.4f}")
     print("keyword screen (same rows):", results["keyword_screen_oof_rows"])
+    print("nested F1:", nested["pooled_metrics"]["f1"], "gate:", results["gate"])
     print(f"pure-Python vs sklearn max abs diff: {worst:.2e}")
     print(f"Wrote {RESULTS} and {MODEL_PATH}")
     return 0

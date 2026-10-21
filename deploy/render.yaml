@@ -9,6 +9,8 @@ services:
     dockerfilePath: deploy/Dockerfile.portal
     healthCheckPath: /healthz
     envVars:
+      - key: RTI_ENV
+        value: production
       - key: RTI_APPROVAL_SECRET
         sync: false
       - key: RTI_ADMIN_TOKEN
@@ -24,6 +26,8 @@ services:
     dockerfilePath: deploy/Dockerfile.agent.free
     healthCheckPath: /api/health
     envVars:
+      - key: RTI_ENV
+        value: production
       - key: RTI_APPROVAL_SECRET
         sync: false
       - key: RTI_ADMIN_TOKEN
