@@ -33,6 +33,48 @@ def load(**env: str) -> subprocess.CompletedProcess[str]:
     )
 
 
+def load_url(**env: str) -> subprocess.CompletedProcess[str]:
+    clean = {k: v for k, v in os.environ.items() if not k.startswith("RTI_")}
+    clean.update(env)
+    code = "from common import config; print(config.PORTAL_URL)"
+    return subprocess.run(
+        [sys.executable, "-c", code],
+        cwd=ROOT,
+        env=clean,
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+
+
+PRODUCTION_SECRETS = {
+    "RTI_ENV": "production",
+    "RTI_APPROVAL_SECRET": STRONG_A,
+    "RTI_ADMIN_TOKEN": STRONG_B,
+    "RTI_OPERATOR_TOKEN": STRONG_C,
+}
+
+
+def test_production_strips_a_pasted_trailing_newline_from_the_portal_url() -> None:
+    # A dashboard paste carries the line break; urlparse ignores it and httpx does not,
+    # so an unstripped value boots healthy and fails every filing.
+    result = load_url(
+        **PRODUCTION_SECRETS,
+        RTI_PORTAL_URL="https://rti-pilot-portal.onrender.com/\n",
+    )
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == "https://rti-pilot-portal.onrender.com"
+
+
+def test_production_refuses_whitespace_inside_the_portal_url() -> None:
+    result = load_url(
+        **PRODUCTION_SECRETS,
+        RTI_PORTAL_URL="https://rti-pilot-portal.onrender.com /api",
+    )
+    assert result.returncode != 0
+    assert "must not contain whitespace" in result.stderr
+
+
 def test_local_uses_demo_defaults_without_any_env() -> None:
     result = load()
     assert result.returncode == 0, result.stderr

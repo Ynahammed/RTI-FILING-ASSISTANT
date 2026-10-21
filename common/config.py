@@ -24,8 +24,11 @@ AGENT_PORT = int(os.getenv("RTI_AGENT_PORT", "8000"))
 PORTAL_HOST = os.getenv("RTI_PORTAL_HOST", "127.0.0.1")
 PORTAL_PORT = int(os.getenv("RTI_PORTAL_PORT", "8001"))
 
-PORTAL_URL = os.getenv("RTI_PORTAL_URL", f"http://{PORTAL_HOST}:{PORTAL_PORT}").rstrip("/")
-AGENT_URL = os.getenv("RTI_AGENT_URL", f"http://{AGENT_HOST}:{AGENT_PORT}").rstrip("/")
+# .strip() before .rstrip("/"): a value pasted from a file or dashboard arrives with a
+# trailing newline, and urlparse tolerates it while httpx refuses every request with
+# "Invalid non-printable ASCII character in URL". Strip it at the boundary, once.
+PORTAL_URL = os.getenv("RTI_PORTAL_URL", f"http://{PORTAL_HOST}:{PORTAL_PORT}").strip().rstrip("/")
+AGENT_URL = os.getenv("RTI_AGENT_URL", f"http://{AGENT_HOST}:{AGENT_PORT}").strip().rstrip("/")
 
 # local (default) uses the demo secrets below. production refuses to start unless both
 # secrets are set, strong, and not one of the known placeholders.
@@ -42,6 +45,8 @@ if ENV == "production":
         raise RuntimeError("RTI_PORTAL_URL must be an absolute http(s) URL")
     if _portal.hostname.lower() in PLACEHOLDER_HOSTS:
         raise RuntimeError("RTI_PORTAL_URL is still a placeholder; set the portal's real URL")
+    if any(ch.isspace() for ch in PORTAL_URL):
+        raise RuntimeError("RTI_PORTAL_URL must not contain whitespace")
 
 DEMO_APPROVAL_SECRET = "rti-pilot-demo-secret-change-me"
 DEMO_ADMIN_TOKEN = "rti-demo-admin"
