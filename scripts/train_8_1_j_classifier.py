@@ -29,7 +29,10 @@ from typing import Any
 import numpy as np
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.linear_model import LogisticRegression
+from sklearn.isotonic import IsotonicRegression
 from sklearn.metrics import average_precision_score, roc_auc_score
+
+from common import metrics as scoring
 
 from agent import nlu
 from agent.exemption_model import MODEL_PATH, NGRAM_RANGE, probability
@@ -107,6 +110,46 @@ def nested_evaluation(rows: list[dict[str, str]]) -> dict[str, Any]:
     return {"threshold_per_outer_fold": chosen, "pooled_metrics": metrics(pooled)}
 
 
+def cross_fitted_calibration(
+    rows: list[dict[str, str]], scores: np.ndarray, labels: np.ndarray
+) -> tuple[np.ndarray, dict[str, float]]:
+    """Isotonic calibration fitted on the other folds, so held-out rows stay unseen."""
+    calibrated = np.zeros_like(scores)
+    for k in range(5):
+        test = [i for i, r in enumerate(rows) if r["fold"] == str(k)]
+        train = [i for i, r in enumerate(rows) if r["fold"] != str(k)]
+        if not test or not train:
+            continue
+        iso = IsotonicRegression(out_of_bounds="clip", y_min=0.0, y_max=1.0)
+        iso.fit(scores[train], labels[train])
+        calibrated[test] = iso.predict(scores[test])
+    before = [float(v) for v in scores]
+    after = [float(v) for v in calibrated]
+    return calibrated, {
+        "method": "isotonic, fitted on the other four folds",
+        "ece_before": scoring.expected_calibration_error(list(labels), before),
+        "ece_after": scoring.expected_calibration_error(list(labels), after),
+        "brier_before": scoring.brier(list(labels), before),
+        "brier_after": scoring.brier(list(labels), after),
+    }
+
+
+def selective(scores: np.ndarray, labels: np.ndarray, coverage: float) -> dict[str, float]:
+    """Precision among the most confident `coverage` share of rows.
+
+    This is what an abstaining screen can promise at a given workload.
+    """
+    count = int(round(len(scores) * coverage))
+    if count <= 0:
+        return {"coverage": coverage, "precision": 0.0, "threshold": 1.0}
+    order = np.argsort(-scores)[:count]
+    return {
+        "coverage": coverage,
+        "precision": round(float(labels[order].mean()), 4),
+        "threshold": round(float(scores[order][-1]), 4),
+    }
+
+
 def metrics(pairs: list[tuple[bool, bool]]) -> dict[str, float | int]:
     pairs = [(bool(p), bool(a)) for p, a in pairs]
     tp = sum(p and a for p, a in pairs)
@@ -145,6 +188,8 @@ def main() -> int:
     kw = metrics(kw_pairs)
     auc = float(roc_auc_score(labels, oof_scores))
     ap = float(average_precision_score(labels, oof_scores))
+    calibrated, calibration = cross_fitted_calibration(rows, oof_scores, labels)
+    selective_at = {f"{c:.2f}": selective(oof_scores, labels, c) for c in (0.25, 0.5, 0.8)}
     vec, clf = fit(rows)
     model = export(vec, clf, threshold)
 
@@ -169,10 +214,14 @@ def main() -> int:
         "classifier_sweep": sweep,
         "nested_threshold_evaluation": nested,
         "keyword_screen_oof_rows": kw,
+        "calibration": calibration,
+        "selective_precision": selective_at,
         "gate": {
             "roc_auc": round(auc, 4),
             "avg_precision": round(ap, 4),
             "f1_lift": round(float(nested["pooled_metrics"]["f1"]) - float(kw["f1"]), 4),
+            "ece_after": calibration["ece_after"],
+            "selective_precision_at_50": selective_at["0.50"]["precision"],
         },
         "pure_python_vs_sklearn_max_abs_diff": worst,
         "note": (
@@ -193,6 +242,8 @@ def main() -> int:
     print(f"threshold-free: ROC AUC={auc:.4f} average precision={ap:.4f}")
     print("keyword screen (same rows):", results["keyword_screen_oof_rows"])
     print("nested F1:", nested["pooled_metrics"]["f1"], "gate:", results["gate"])
+    print("calibration:", calibration)
+    print("selective precision:", selective_at)
     print(f"pure-Python vs sklearn max abs diff: {worst:.2e}")
     print(f"Wrote {RESULTS} and {MODEL_PATH}")
     return 0

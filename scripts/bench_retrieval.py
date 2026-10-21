@@ -50,6 +50,7 @@ def load() -> list[dict[str, Any]]:
         cited = cited if isinstance(cited, list) else []
         row["sections"] = set(cited)
         row["primary"] = cited[0] if cited else ""
+        row["authority"] = (row.get("public_authority") or "").strip().lower()
     return rows
 
 
@@ -119,12 +120,23 @@ def _is_relevant(query: dict[str, Any], other: dict[str, Any], key: str) -> bool
         return bool(query["sections"]) and bool(query["sections"] & other["sections"])
     if key == "same_primary":
         return bool(query["primary"]) and query["primary"] == other["primary"]
+    if key == "same_authority":
+        return bool(query["authority"]) and query["authority"] == other["authority"]
+    if key == "section_and_authority":
+        return (
+            _is_relevant(query, other, "any_section")
+            and bool(query["authority"])
+            and query["authority"] == other["authority"]
+        )
     raise ValueError(f"unknown relevance key: {key}")
 
 
 def results_preview(rows: list[dict[str, Any]], sim) -> list[dict[str, Any]]:
-    """Score both relevance definitions; named so main() can reuse the numbers."""
-    return [evaluate(rows, key, sim) for key in ("any_section", "same_primary")]
+    """Score every relevance definition; named so main() can reuse the numbers."""
+    return [
+        evaluate(rows, key, sim)
+        for key in ("any_section", "same_primary", "same_authority", "section_and_authority")
+    ]
 
 
 def main() -> int:
@@ -132,6 +144,12 @@ def main() -> int:
     sim = similarity_matrix([text_of(r) for r in rows])
     scored = results_preview(rows, sim)
     any_section = next(e for e in scored if e["relevance"] == "any_section")
+    by_authority = next(e for e in scored if e["relevance"] == "same_authority")
+    authority_lift = (
+        by_authority["precision_at_k"][10] / by_authority["chance_precision_at_10"]
+        if by_authority["chance_precision_at_10"]
+        else 0.0
+    )
     lift = (
         any_section["precision_at_k"][10] / any_section["chance_precision_at_10"]
         if any_section["chance_precision_at_10"]
@@ -144,10 +162,17 @@ def main() -> int:
         "rows_with_sections": sum(bool(r["sections"]) for r in rows),
         "k": list(KS),
         "relevance": scored,
+        "relevance_definitions": {
+            "any_section": "shares at least one exemption section",
+            "same_primary": "shares the first cited section",
+            "same_authority": "same public authority",
+            "section_and_authority": "shares a section and the same authority",
+        },
         "gate": {
             "precision_at_10": any_section["precision_at_k"][10],
             "chance_precision_at_10": any_section["chance_precision_at_10"],
             "precision_lift": round(lift, 4),
+            "authority_precision_lift": round(authority_lift, 4),
         },
         "note": (
             "Retrieval is unsupervised, so no fold split is needed. Precedents are "

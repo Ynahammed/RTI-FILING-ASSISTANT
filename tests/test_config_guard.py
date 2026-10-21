@@ -80,6 +80,15 @@ def test_production_accepts_strong_distinct_secrets() -> None:
             {"RTI_ENV": "production", "RTI_APPROVAL_SECRET": STRONG_A, "RTI_ADMIN_TOKEN": STRONG_A},
             "must differ",
         ),
+        (
+            {
+                "RTI_ENV": "production",
+                "RTI_APPROVAL_SECRET": STRONG_A,
+                "RTI_ADMIN_TOKEN": STRONG_B,
+                "RTI_PORTAL_URL": "https://example.invalid",
+            },
+            "placeholder",
+        ),
         ({"RTI_ENV": "staging"}, "must be 'local' or 'production'"),
     ],
 )

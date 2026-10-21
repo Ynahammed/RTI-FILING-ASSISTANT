@@ -63,6 +63,11 @@ def _load() -> dict[str, Any] | None:
     return json.loads(MODEL_PATH.read_text(encoding="utf-8"))
 
 
+def load_model() -> dict[str, Any] | None:
+    """Public accessor for the exported weights, used by the evaluation scripts."""
+    return _load()
+
+
 def advisory_flag(text: str) -> dict[str, float] | None:
     """Return {score, threshold} when the advisory classifier flags the text, else None.
 

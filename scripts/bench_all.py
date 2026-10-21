@@ -35,6 +35,7 @@ STEPS = (
     ("exemptions_multilabel", ["-m", "scripts.bench_exemptions"]),
     ("precedent_retrieval", ["-m", "scripts.bench_retrieval"]),
     ("source_b_coverage", ["-m", "scripts.bench_source_b"]),
+    ("citizen_requests", ["-m", "scripts.bench_citizen_requests"]),
 )
 
 # gate name -> (artifact, path into the artifact, comparator, threshold)
@@ -45,6 +46,8 @@ GATES: dict[str, tuple[str, tuple[str, ...], str, float]] = {
     "retrieval P@10 beats chance 1.5x": ("retrieval_results.json", ("gate", "precision_lift"), ">=", 1.5),
     "honest variant selection holds macro AP": ("exemptions_multilabel_results.json", ("nested_variant_selection", "pooled_macro_ap"), ">=", 0.20),
     "calibrated ECE below 0.03": ("exemptions_multilabel_results.json", ("calibration", "ece_after"), "<=", 0.03),
+    "binary calibrated ECE below 0.05": ("classifier_8_1_j_results.json", ("gate", "ece_after"), "<=", 0.05),
+    "retrieval authority P@10 beats chance 2x": ("retrieval_results.json", ("gate", "authority_precision_lift"), ">=", 2.0),
 }
 
 
@@ -130,6 +133,8 @@ def summary() -> dict[str, Any]:
             "avg_precision": dig(single, ("gate", "avg_precision")),
             "nested_f1": dig(single, ("nested_threshold_evaluation", "pooled_metrics", "f1")),
             "keyword_f1": dig(single, ("keyword_screen_oof_rows", "f1")),
+            "calibrated_ece": dig(single, ("calibration", "ece_after")),
+            "selective_precision_at_50": dig(single, ("gate", "selective_precision_at_50")),
         },
         "exemptions_multilabel": {
             "labels": multi.get("labels"),
@@ -140,6 +145,10 @@ def summary() -> dict[str, Any]:
             "nested_variant_macro_ap": dig(multi, ("nested_variant_selection", "pooled_macro_ap")),
             "mean_ece": dig(multi, ("variants", "char", "mean_ece")),
             "calibrated_ece": dig(multi, ("calibration", "ece_after")),
+        },
+        "citizen_requests": {
+            "present": dig(read("citizen_requests_results.json"), ("present",)),
+            "rows": dig(read("citizen_requests_results.json"), ("rows",)),
         },
         "source_b": {
             "corpus_total": dig(read("source_b_results.json"), ("corpus", "total_cases")),

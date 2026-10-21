@@ -184,7 +184,11 @@ of 1,218 (134 `UNKNOWN` excluded):
 | Precedent retrieval | P@10 / MRR | 0.1705 / 0.3452 |
 | Retrieval chance | P@10 | 0.0807 (2.11× lift) |
 | Multi-label calibration | ECE before → after isotonic | 0.1046 → **0.0127** |
-| Source B transfer (A → B orders) | ROC AUC | 0.4984 (chance) |
+| Binary calibration | ECE before → after isotonic | 0.1259 → **0.0312** |
+| Binary selective precision | at 25% / 50% coverage | 0.2177 / 0.1642 |
+| Retrieval, same authority | P@10 vs chance | 0.0274 vs 0.0066 (4.15×) |
+| Source B | documents carrying order text | 17 of 298 (not scoreable) |
+| Citizen requests | labelled file present | no (`bench_citizen_requests`) |
 
 ```bash
 python -m scripts.bench_all             # runs every benchmark and enforces gates
@@ -192,7 +196,7 @@ python -m scripts.bench_all --with-eval # also runs the 14 scenarios below
 ```
 
 `bench_all` exits non-zero when a score falls below its floor, and gates on the 14
-scenarios below when their artifact is present. All seven gates currently pass. Full
+scenarios below when their artifact is present. All nine gates currently pass. Full
 methodology, calibration numbers and the limitations are in
 [docs/benchmarks.md](docs/benchmarks.md).
 
@@ -259,8 +263,12 @@ take time to wake; the workspace's free instance-hours are shared between servic
 Use this deployment for demos/evaluation, not durable storage or always-on service.
 For Render setup details, see [deploy/README.md](deploy/README.md).
 
-The URLs above were provided for this README; this document does not claim that a
-live health check or full deployed evaluation has been completed.
+**Verified on 2026-10-21.** Both services answer: portal `/healthz` and agent
+`/api/health` return 200. The deployed agent is nevertheless **misconfigured**: its
+`RTI_PORTAL_URL` is still `https://example.invalid`, so submissions fail after the
+submit step and the deployed evaluation scores 8/14. Set that variable to the portal's
+public URL and redeploy. Production now refuses to start with a placeholder portal URL,
+so this cannot recur silently.
 
 ---
 
@@ -276,8 +284,9 @@ live health check or full deployed evaluation has been completed.
 - **SQLite on a single instance.** Fine for a demo; two replicas would diverge.
 - **The portal's CAPTCHA is a placeholder**, not a real challenge. That is intentional:
   automated solving is out of scope.
-- **Public Render URLs are listed above.** Their availability and the full deployed
-  evaluation have not been verified here.
+- **The deployed agent points at a placeholder portal URL**, so it currently fails 6 of
+  14 deployed scenarios. The fix is one environment variable plus a redeploy; it cannot be
+  applied from this repository alone.
 - **Voice input is not built** (first item in the plan's cut order).
 
 ## Security notes

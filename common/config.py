@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+from urllib.parse import urlparse
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
@@ -31,6 +32,16 @@ AGENT_URL = os.getenv("RTI_AGENT_URL", f"http://{AGENT_HOST}:{AGENT_PORT}").rstr
 ENV = os.getenv("RTI_ENV", "local").strip().lower()
 if ENV not in ("local", "production"):
     raise RuntimeError("RTI_ENV must be 'local' or 'production'")
+
+# A deployed agent that still points at a placeholder silently fails every filing, so
+# production refuses to start instead.
+PLACEHOLDER_HOSTS = frozenset({"example.invalid", "example.com", "example.org", "localhost.invalid"})
+if ENV == "production":
+    _portal = urlparse(PORTAL_URL)
+    if _portal.scheme not in ("http", "https") or not _portal.hostname:
+        raise RuntimeError("RTI_PORTAL_URL must be an absolute http(s) URL")
+    if _portal.hostname.lower() in PLACEHOLDER_HOSTS:
+        raise RuntimeError("RTI_PORTAL_URL is still a placeholder; set the portal's real URL")
 
 DEMO_APPROVAL_SECRET = "rti-pilot-demo-secret-change-me"
 DEMO_ADMIN_TOKEN = "rti-demo-admin"

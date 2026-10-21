@@ -11,7 +11,7 @@ from typing import Any
 
 import httpx
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
@@ -56,6 +56,42 @@ class TestResultIn(BaseModel):
 @app.get("/api/health")
 def health() -> dict[str, str]:
     return {"status": "ok", "service": "rti-pilot-agent"}
+
+
+@app.get("/api/ready")
+def ready() -> Any:
+    """Readiness beyond liveness: the database opens and the portal answers.
+
+    Kept separate from /api/health so the platform's health check cannot fail
+    because a dependency is briefly unavailable, and so a deployment that points
+    at a placeholder URL is visible instead of failing silently on first filing.
+    """
+    portal_ok = False
+    detail = ""
+    try:
+        response = httpx.get(f"{config.PORTAL_URL}/healthz", timeout=3.0)
+        portal_ok = response.status_code == 200
+        detail = f"portal {response.status_code}"
+    except Exception as exc:  # network, DNS, timeout
+        detail = f"portal unreachable ({type(exc).__name__})"
+
+    db_ok = True
+    try:
+        conn = db.init_db()
+        conn.execute("SELECT 1")
+        conn.close()
+    except Exception:
+        db_ok = False
+        detail = f"{detail}; database unavailable".lstrip("; ")
+
+    payload = {
+        "ready": portal_ok and db_ok,
+        "portal_url": config.PORTAL_URL,
+        "detail": detail,
+    }
+    if not payload["ready"]:
+        return JSONResponse(status_code=503, content=payload)
+    return payload
 
 
 @app.get("/api/config")
