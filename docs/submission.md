@@ -62,8 +62,10 @@ The evaluation writes `artifacts/eval_results.json`, uploads each result to
 
 ## Known gaps to state honestly on the deck
 
-- The deployed agent still points at a placeholder portal URL; it files nothing until
-  that variable is set and the service is redeployed.
+- The hosted agent is verified end to end: **16/16** scenarios against the deployed
+  agent and portal (2026-10-22, `artifacts/eval_remote.json`). It depends on three
+  environment variables that live in the host, not this repository: `RTI_PORTAL_URL`,
+  `RTI_OPERATOR_TOKEN`, and an `RTI_APPROVAL_SECRET` identical to the portal's.
 - State fees are reported from official state sources but not gazette-verified, and
   Telangana's schedule is tiered by authority level while the registry records no level.
   The central rules are quoted from the Act and the 2012 Fee Rules.

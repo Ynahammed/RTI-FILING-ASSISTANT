@@ -349,9 +349,13 @@ redeploy; then re-run the evaluation against the public URLs before calling it v
 - **Filing is proven against the bundled mock only.** The `PortalAdapter` seam means a
   real portal is a transport, not a rewrite, and the verifier is tested by replaying
   recorded pages — but no real government portal has been driven.
-- **The deployed agent points at a placeholder portal URL**, so it currently fails 6 of
-  14 deployed scenarios. The fix is one environment variable plus a redeploy; it cannot be
-  applied from this repository alone.
+- **The hosted deployment is verified against its own portal, not only locally.**
+  `artifacts/eval_remote.json` records **16/16** scenarios against
+  `rti-pilot-agent.onrender.com` and `rti-pilot-portal.onrender.com` on 2026-10-22,
+  including filing, payment, the Section 6(3) transfer, the Section 19 appeal and both
+  review decisions. It needs `RTI_PORTAL_URL`, `RTI_OPERATOR_TOKEN` and the same
+  `RTI_APPROVAL_SECRET` on both services; `RTI_ENV=production` refuses to boot without
+  them. Free instances sleep, so the first request can take up to a minute.
 - **Voice input is not built** (first item in the plan's cut order).
 
 ## Security notes
