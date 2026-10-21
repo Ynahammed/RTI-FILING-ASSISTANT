@@ -8,7 +8,7 @@ reported as a pass: the exit code is non-zero when any gate fails.
 Gates are set well below the measured scores, not at them: they catch a model
 that has collapsed or a feature that has started leaking, not normal noise.
 
-Optional: `--with-eval` runs the 14-scenario end-to-end harness too, which needs
+Optional: `--with-eval` runs the 16-scenario end-to-end harness too, which needs
 both services up (python -m scripts.dev).
 
 Usage (project root, after downloading the dataset to data/rti-bench):
@@ -30,8 +30,11 @@ ARTIFACTS = ROOT / "artifacts"
 SUMMARY = ARTIFACTS / "benchmarks.json"
 
 STEPS = (
+    ("rules_provenance", ["-m", "scripts.check_rules"]),
+    ("registry_coverage", ["-m", "scripts.check_registry"]),
     ("personal_data_screen", ["-m", "scripts.bench_rti_bench"]),
     ("exemption_8_1_j", ["-m", "scripts.train_8_1_j_classifier"]),
+    ("review_routing", ["-m", "scripts.bench_review_routing"]),
     ("exemptions_multilabel", ["-m", "scripts.bench_exemptions"]),
     ("precedent_retrieval", ["-m", "scripts.bench_retrieval"]),
     ("source_b_coverage", ["-m", "scripts.bench_source_b"]),
@@ -48,6 +51,13 @@ GATES: dict[str, tuple[str, tuple[str, ...], str, float]] = {
     "calibrated ECE below 0.03": ("exemptions_multilabel_results.json", ("calibration", "ece_after"), "<=", 0.03),
     "binary calibrated ECE below 0.05": ("classifier_8_1_j_results.json", ("gate", "ece_after"), "<=", 0.05),
     "retrieval authority P@10 beats chance 2x": ("retrieval_results.json", ("gate", "authority_precision_lift"), ">=", 2.0),
+    "every required rule is cited": ("rules_provenance_results.json", ("gate", "uncited"), "<=", 0),
+    "every jurisdiction has an authority": ("registry_coverage_results.json", ("gate", "uncovered"), "<=", 0),
+    "registry entries carry provenance": ("registry_coverage_results.json", ("gate", "missing_provenance"), "<=", 0),
+    "no rule claims verification without a source": ("rules_provenance_results.json", ("gate", "unverified_claims"), "<=", 0),
+    "review routing recall at least 0.35": ("review_routing_results.json", ("gate", "recall"), ">=", 0.35),
+    "review routing precision at least 0.28": ("review_routing_results.json", ("gate", "precision"), ">=", 0.28),
+    "review routing load at most 16%": ("review_routing_results.json", ("gate", "review_load"), "<=", 0.16),
     "operations completion at least 90%": ("operations_results.json", ("summary", "gate", "completion_rate"), ">=", 0.9),
     "operations no duplicate registrations": ("operations_results.json", ("summary", "duplicate_registrations"), "<=", 0),
     "operations no payment without approval": ("operations_results.json", ("summary", "payments_without_approval"), "<=", 0),
@@ -149,6 +159,18 @@ def summary() -> dict[str, Any]:
             "nested_variant_macro_ap": dig(multi, ("nested_variant_selection", "pooled_macro_ap")),
             "mean_ece": dig(multi, ("variants", "char", "mean_ece")),
             "calibrated_ece": dig(multi, ("calibration", "ece_after")),
+        },
+        "rules_provenance": dig(read("rules_provenance_results.json"), ("provenance",)),
+        "registry": dig(read("registry_coverage_results.json"), ("coverage",)),
+        "review_routing": {
+            "threshold": dig(read("review_routing_results.json"), ("chosen_threshold",)),
+            "rule_only_recall": dig(read("review_routing_results.json"), ("rule_only", "recall")),
+            "recall": dig(read("review_routing_results.json"), ("gate", "recall")),
+            "precision": dig(read("review_routing_results.json"), ("gate", "precision")),
+            "review_load": dig(read("review_routing_results.json"), ("gate", "review_load")),
+            "nested_recall": dig(
+                read("review_routing_results.json"), ("nested", "pooled_metrics", "recall")
+            ),
         },
         "operations": dig(read("operations_results.json"), ("summary",)),
         "citizen_requests": {

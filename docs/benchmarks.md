@@ -8,9 +8,10 @@ python -m scripts.bench_all             # benchmarks only
 python -m scripts.bench_all --with-eval # plus the 14 end-to-end scenarios (needs both services)
 ```
 
-`bench_all` enforces nine gates and exits non-zero when any score falls below its floor,
-so a regression fails instead of being reported as a pass. All numbers below come from one
-run of that command (exit 0).
+`bench_all` enforces fifteen gates, plus the 16-scenario gate when its artifact is
+present and three more for the live operations run with `--with-ops` (nineteen in total).
+It exits non-zero when any score falls below its floor, so a regression fails instead of
+being reported as a pass. All numbers below come from one run of that command (exit 0).
 
 ## Dataset
 
@@ -36,10 +37,19 @@ The deterministic rule triage uses (`agent.nlu.has_personal_data`), scored on
 
 | Precision | Recall | F1 |
 |---|---|---|
-| 0.5294 | 0.0756 | 0.1324 |
+| 0.5263 | 0.0840 | 0.1449 |
 
-It is precise and very conservative: it fires 17 times on 1,084 rows. That is why it is
+It is precise and very conservative: it fires 19 times on 1,084 rows. That is why it is
 safe to block on, and why the classifier below exists.
+
+The rule was rebuilt for citizen phrasing after the development fixtures in section 9
+showed it missing colloquial requests. It now matches records and subjects on word
+boundaries with English plurals ("beneficiaries", "names and addresses"), recognises a
+named or honorific subject ("Dr Kulkarni"), and treats an identity-only request about a
+public servant — "names of the officers who approved" — as a request about a post rather
+than a person. On appellate text that trades a little recall for precision; on the
+citizen fixtures it was worth roughly 0.8 recall. Those fixtures are in-sample, so the
+appellate numbers above remain the only out-of-sample measurement of the rule.
 
 ## 2. Section 8(1)(j) classifier (binary)
 
@@ -52,7 +62,7 @@ CV with folds by `hf_id % 5`.
 | Average precision | **0.2545** | base rate 0.1098 |
 | Nested CV F1 | **0.2980** | threshold chosen inside each fold |
 | Out-of-fold F1 @0.43 | 0.3320 | threshold chosen on the scored rows (optimistic) |
-| Keyword rule F1 | 0.1324 | same rows |
+| Keyword rule F1 | 0.1449 | same rows |
 
 **Calibration.** Cross-fitted isotonic regression moves ECE from **0.1259 to 0.0312** and
 Brier from 0.1134 to 0.0926. Calibrated scores may be read as probabilities; raw scores may
@@ -141,11 +151,43 @@ slots cannot cover them. P@10, MRR and nDCG are the meaningful measures at this 
 
 ## 6. End-to-end workflow
 
-`scripts/run_eval` drives the agent's HTTP API and the portal across 14 scenarios (TC1–TC4,
-X1–X10), including the approval gate, fee ordering, exemption blocking, prompt injection,
-wrong authority and deadline expiry. Last recorded run: **14/14 passed**.
+`scripts/run_eval` drives the agent's HTTP API and the portal across 16 scenarios (TC1–TC4,
+X1–X12), including the approval gate, fee ordering, exemption blocking, prompt injection,
+wrong authority, deadline expiry, and both review decisions with their audit trail. Last
+recorded run: **16/16 passed**.
 
-## 7. Operations (real requests through the live system)
+## 7. Exemption review routing
+
+Blocking a filing on a classifier with 0.30 precision would refuse valid requests. The
+screen therefore **routes to a human review queue** and never files a flagged request on
+its own; it does not reject it. `scripts/bench_review_routing.py` scores that policy on
+the same 1,084 rows (119 positives):
+
+| Policy | TP | FP | FN | Precision | Recall | Review load |
+|---|---|---|---|---|---|---|
+| Keyword rule blocks | 10 | 9 | 109 | 0.5263 | 0.0840 | 1.75% |
+| Rule OR classifier ≥ 0.42 | 47 | 106 | 72 | 0.3072 | **0.3950** | 14.1% |
+
+That is **4.7× the rule's recall** for one review in seven requests. The threshold is not
+hand-picked: the selection rule is *maximise recall subject to precision ≥ 0.28 and review
+load ≤ 16%*, measured on out-of-fold scores. Re-choosing the threshold inside each outer
+fold with no knowledge of the held-out rows gives recall **0.3697** at precision 0.3165,
+so the number is not an artifact of fitting the threshold on the rows it is scored on.
+Those re-selections land at 0.42, 0.42, 0.50, 0.43 and 0.42: one fold moves to 0.50 because
+its inner rows miss the 0.28 precision floor by 0.008 at 0.42. The pooled nested recall is
+the number the gate checks; the spread is reported rather than smoothed away.
+
+What this means in the product: `agent.supervisor` queues a request for review when the
+calibrated classifier score reaches the threshold **or** the deterministic rule fires. The
+gate is unchanged — review is entered before approval, so nothing is filed while a flag is
+open. A flag is work with an owner: claim, due time, release or uphold, and a per-operator
+audit row; scenarios X11 and X12 exercise both decisions through the HTTP API.
+On the 40 live requests in section 8 the combined screen caught **6 of 6**
+8(1)(j)-labelled requests with one false positive (precision 0.86), where the rule alone
+caught 1. That run predates the rule rebuild in section 1: the rebuilt rule is narrower on
+identity-only requests, so a rerun could move a row or two, not the conclusion.
+
+## 8. Operations (real requests through the live system)
 
 `scripts/bench_operations.py` samples real RTI-Bench requests and drives each one through
 the running agent and portal exactly as a client would: create the run, answer the
@@ -158,19 +200,34 @@ Last recorded run (**40 requests, concurrency 4**):
 |---|---|
 | Attempted | 40 |
 | Reached a terminal state | 40 (100%) |
-| Verified filings | 37 (92.5%) |
-| Blocked for exemption review | 1 |
+| Verified filings | 32 (80%) |
+| Queued for exemption review | 7 |
 | Redirected as grievance | 1 |
 | Harness errors | 0 |
 | Duplicate registrations | 0 |
 | Payments without approval | 0 |
-| Latency p50 / p95 | 13.9 s / 45.4 s |
-| Throughput | 12.65 runs/min at concurrency 4 |
-| Exemption precision / recall vs dataset | 1.00 / 0.17 |
+| Latency p50 / p95 | 3.15 s / 3.92 s |
+| Throughput | 65.8 runs/min at concurrency 4 |
+| Exemption screen precision / recall vs dataset | 0.86 / 1.00 |
 
-A sequential run (20 requests, concurrency 1) verified 19 of 20 with p50 4.1 s and p95
-34.7 s. The higher latency at concurrency 4 is SQLite write contention, not a model cost.
-Latency is wall-clock per run including polling, not server-only time.
+Latency and throughput at three concurrency levels, same 40-request mix (20 at C=1):
+
+| Concurrency | Verified | Review | p50 | p95 | Throughput |
+|---|---|---|---|---|---|
+| 1 (20 requests) | 15 | 4 | 1.40 s | 1.79 s | 47.9 runs/min |
+| 4 (40 requests) | 32 | 7 | 3.15 s | 3.92 s | 65.8 runs/min |
+| 8 (40 requests) | 32 | 7 | 7.31 s | 10.27 s | 56.5 runs/min |
+
+Repeat runs vary by about 20% (C=4 p95 has landed between 2.7 s and 3.9 s), which is
+noise next to the pre-fix 45 s. Concurrency 4 remains the sweet spot; at 8 the SQLite
+writer serialises and per-run latency triples for less throughput than C=4. Before the
+fix below, the same C=4 run took **45.4 s p95** and 12.65 runs/min, and C=1 took 34.7 s
+p95 — the queue was waiting on the portal's SQLite writer, not on the model.
+
+**The contention fix.** The portal now keeps one connection per request with a bounded
+`busy_timeout`, WAL mode, and short write transactions; the filing path stopped holding a
+transaction open across the CAPTCHA handoff. The verifier lease is claimed once per run
+rather than polled. Latency is wall-clock per run including polling, not server-only time.
 
 **This benchmark found three defects the curated scenarios never touched**, all fixed:
 
@@ -183,40 +240,84 @@ Latency is wall-clock per run including polling, not server-only time.
    could never terminate. Both now resolve: a confirmation routes the run, and a
    records-or-action reply sets the intent signal.
 
-The exemption screen shows the same shape end to end as in isolation: precise (1.00)
-and conservative (0.17 recall), so most 8(1)(j)-labelled requests are still filed rather
-than blocked.
+The exemption screen shows a different shape end to end than the rule alone did: with the
+classifier in the routing path it caught all 6 8(1)(j)-labelled requests in this sample
+and queued them for review instead of filing them, at one false positive in 40
+(precision 0.86). Six positives is a small sample; section 7's 119-positive measurement
+is the number to trust.
 
-## 8. Citizen requests
+## 9. Citizen requests
 
 `scripts/bench_citizen_requests.py` scores a labelled citizen-request file at
-`data/citizen-requests.jsonl` when one exists. No such file is present, so it reports
-`present: false` and scores nothing. The schema is documented in the script. This is the
-only gap that more modelling cannot close.
+`data/citizen-requests.jsonl`. No such file exists yet, so the artifact reports
+`present: false`, the reason, and how far the set is from the 100-row target. The schema is
+in the script; collection, labelling and adjudication run through
+`python -m scripts.annotate_server`, and the full protocol (recruitment, consent, codebook,
+sample-size reasoning, timeline) is [docs/citizen-data.md](citizen-data.md).
+
+The benchmark refuses an unfrozen file, a frozen file whose hash no longer matches, fewer
+than 100 adjudicated rows, fewer than 25 positives or 25 negatives, and kappa below 0.6.
+When it does score, it reports Wilson intervals beside precision and recall, because at
+n = 100 a point estimate alone invites over-reading.
+
+**Development-only checks, not evidence.** `scripts/bench_citizen_dev.py` scores two
+synthetic citizen-style files written and labelled by the author, marked `evidence: false`
+and blocked from freezing:
+
+| File | Rows | Rule precision / recall | State |
+|---|---|---|---|
+| `data/dev/synthetic-citizen.jsonl` | 100 (35 positive) | 1.00 / 1.00 | in-sample |
+| `data/dev/paraphrase-holdout.jsonl` | 40 (20 positive) | 1.00 / 1.00 | in-sample |
+
+The history matters more than the numbers. The first file, written before the screen was
+changed, scored the old rule at **0.14 recall at 1.00 precision** (5 of 35): it found
+eleven personal-data requests in plain English and missed "the residential address of the
+PIO", "the Aadhaar numbers of beneficiaries" and "the fee defaulters list with student
+names". The rule was extended against those misses. A second file was then written in
+different phrasings and scored once, before any repair: **0.55 recall at 0.79 precision**,
+with three false positives on public-office text — the municipal commissioner's *office*
+address, the *number* of patients treated in the OPD, and a post's salary *scale*. Those
+three fixed the rule's shape rather than its vocabulary: identity-only requests about
+public servants stopped counting, and "address of", "patient" and bare "salary" were
+replaced by terms that mean a private fact.
+
+Both files are now saturated because both were used to tune. They are regression
+fixtures — they catch a future edit that reopens one of these gaps — and they cannot
+support a citizen-accuracy claim. Only the frozen 100-row human set can; that remains
+`present: false`.
 
 ## Gates
 
 | Gate | Floor | Measured |
 |---|---|---|
 | 8(1)(j) ROC AUC | ≥ 0.65 | 0.7170 |
-| 8(1)(j) nested F1 beats keyword rule | > 0 | +0.1656 |
+| 8(1)(j) nested F1 beats keyword rule | > 0 | +0.1531 |
 | Multi-label macro AP over base rate | ≥ 2× | 3.55× |
 | Retrieval P@10 over chance | ≥ 1.5× | 2.11× |
 | Honest variant selection macro AP | ≥ 0.20 | 0.2269 |
 | Multi-label calibrated ECE | ≤ 0.03 | 0.0127 |
 | Binary calibrated ECE | ≤ 0.05 | 0.0312 |
 | Retrieval authority P@10 over chance | ≥ 2× | 4.15× |
+| Review routing recall | ≥ 0.35 | 0.3950 |
+| Review routing precision | ≥ 0.28 | 0.3072 |
+| Review routing load | ≤ 16% | 14.11% |
+| Every required rule is cited | 0 uncited | 0 |
+| Every jurisdiction has an authority | 0 uncovered | 0 (36/36) |
+| Registry entries carry provenance | 0 missing | 0 |
+| No rule claims verification without a source | 0 | 0 |
 | Operations completion | ≥ 90% | 100% |
 | Operations duplicate registrations | 0 | 0 |
 | Operations payments without approval | 0 | 0 |
-| End-to-end scenarios | all pass | 14/14 |
+| End-to-end scenarios | all pass | 16/16 |
 
 ## What these numbers do not support
 
 - **No claim of production accuracy on citizen text.** Every label here comes from an
   appellate decision. The citizen harness exists but has no data.
-- **No claim that the classifier can block a filing.** At 0.28 nested precision it is a
-  screening aid; the deterministic rule remains the only thing that blocks.
+- **The classifier cannot reject a request.** At 0.31 routing precision it queues for a
+  human, which is why review load is capped at 16%. A reviewer still decides.
+- **The review queue has no owner yet.** Flags route to a queue the dashboard shows, but
+  there is no per-operator assignment or SLA.
 - **No Source B coverage claim.** Its text is absent for 281 of 298 records, so no text
   task can be scored on it.
 - **Retrieval relevance is still a proxy.** Authority matching lifts precision over chance,

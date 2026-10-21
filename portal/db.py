@@ -317,31 +317,42 @@ def record_payment(
     if skew_days:
         set_setting(conn, "skew_next_deadline_days", "0")
 
-    reg_no = next_registration(conn, app["authority_code"], now)
-    deadline = compute_deadline(now, bool(app["urgent"]))
-    displayed = deadline + timedelta(days=skew_days)
-    canonical = canonical_authority(conn, app["state"], app["department"])
-    transfer_to = None
-    if canonical and canonical["code"] != app["authority_code"]:
-        transfer_to = canonical["code"]
+    # Registration numbers are allocated by counting existing rows for the
+    # department and year. Two concurrent payments could read the same count and
+    # pick the same number, which surfaced as `UNIQUE constraint failed:
+    # applications.reg_no` in the operations benchmark. The write lock makes the
+    # read-then-update atomic; a second payer waits, then sees the first row.
+    conn.execute("BEGIN IMMEDIATE")
+    try:
+        reg_no = next_registration(conn, app["authority_code"], now)
+        deadline = compute_deadline(now, bool(app["urgent"]))
+        displayed = deadline + timedelta(days=skew_days)
+        canonical = canonical_authority(conn, app["state"], app["department"])
+        transfer_to = None
+        if canonical and canonical["code"] != app["authority_code"]:
+            transfer_to = canonical["code"]
 
-    conn.execute(
-        """UPDATE applications SET status=?, captcha_passed=1, paid_at=?, reg_no=?, filed_at=?,
-               deadline=?, displayed_deadline=?, confirmation_available=?, transfer_to_code=?, transfer_at=?
-           WHERE app_id=?""",
-        (
-            "transferred" if transfer_to else "filed",
-            iso(now), reg_no, iso(now), iso(deadline), iso(displayed),
-            0 if timeout else 1, transfer_to, iso(now) if transfer_to else None, app["app_id"],
-        ),
-    )
-    conn.execute(
-        """INSERT INTO payment_attempts(attempt_id, app_id, idempotency_key, amount_inr,
-               accepted, reason, approval_id, reg_no, created_at)
-           VALUES (?, ?, ?, ?, 1, NULL, ?, ?, ?)""",
-        (attempt_id, app["app_id"], idempotency_key, amount_inr,
-         (token_payload or {}).get("approval_id"), reg_no, iso(now)),
-    )
+        conn.execute(
+            """UPDATE applications SET status=?, captcha_passed=1, paid_at=?, reg_no=?, filed_at=?,
+                   deadline=?, displayed_deadline=?, confirmation_available=?, transfer_to_code=?, transfer_at=?
+               WHERE app_id=?""",
+            (
+                "transferred" if transfer_to else "filed",
+                iso(now), reg_no, iso(now), iso(deadline), iso(displayed),
+                0 if timeout else 1, transfer_to, iso(now) if transfer_to else None, app["app_id"],
+            ),
+        )
+        conn.execute(
+            """INSERT INTO payment_attempts(attempt_id, app_id, idempotency_key, amount_inr,
+                   accepted, reason, approval_id, reg_no, created_at)
+               VALUES (?, ?, ?, ?, 1, NULL, ?, ?, ?)""",
+            (attempt_id, app["app_id"], idempotency_key, amount_inr,
+             (token_payload or {}).get("approval_id"), reg_no, iso(now)),
+        )
+        conn.execute("COMMIT")
+    except Exception:
+        conn.execute("ROLLBACK")
+        raise
     log(conn, app["app_id"], "payment_accepted", f"{reg_no} timeout={timeout}")
     if transfer_to:
         log(conn, app["app_id"], "transferred", f"section 6(3) -> {transfer_to}")

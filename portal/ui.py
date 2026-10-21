@@ -180,7 +180,7 @@ The portal did not create a duplicate.</div>
     return layout("Already received", body)
 
 
-def captcha_page(app: Any, admin_token: str) -> HTMLResponse:
+def captcha_page(app: Any) -> HTMLResponse:
     body = f"""
 <div class="card">
 <h2>Step 2 of 3 &middot; Human verification</h2>
@@ -190,9 +190,13 @@ challenge. A demo operator completes it below, or uses the demo console. This mi
 manual-handoff rule.</div>
 <form method="post" action="/admin/captcha/{e(app['app_id'])}/complete">
 <label for="admin_token">Demo operator token</label>
-<input id="admin_token" name="admin_token" type="text" value="{e(admin_token)}">
+<input id="admin_token" name="admin_token" type="password" value=""
+       placeholder="paste the operator token" autocomplete="off">
 <p class="lede">Mock challenge: <strong>select the traffic lights</strong> (not implemented — this is a placeholder, not a real challenge).</p>
 <button type="submit">Complete challenge as demo operator</button>
+<p class="lede">The agent itself stops here. In the dashboard, the approval card's
+<strong>Demo operator: complete CAPTCHA</strong> button does the same handoff with the
+token held server-side.</p>
 </form>
 </div>"""
     return layout("CAPTCHA", body)
@@ -304,20 +308,33 @@ evidence: action requests leave the RTI pipeline here.</div>
     return layout("Grievance received", body)
 
 
-def clock_page(now: str, applications: list[Any], timeout_next: bool, skew: int, admin_token: str) -> HTMLResponse:
+def admin_login(error: str = "") -> HTMLResponse:
+    alert = f"<div class='alert' role='alert'>{e(error)}</div>" if error else ""
+    body = f"""
+<div class="card">
+<h2>Demo console</h2><div class="warnbox"><strong>Operator-only surface.</strong> The demo console drives the mock clock,
+completes the mock CAPTCHA and flips failure switches. It is not citizen-facing.</div>
+{alert}
+<form method="post" action="/admin/login">
+<label for="admin_token">Demo operator token</label>
+<input id="admin_token" name="admin_token" type="password" autocomplete="off" required>
+<button type="submit">Open console</button>
+</form>
+</div>"""
+    return layout("Demo console sign-in", body)
+
+
+def clock_page(now: str, applications: list[Any], timeout_next: bool, skew: int) -> HTMLResponse:
     rows = "".join(
         f"""<tr><td><code>{e(a['app_id'])}</code><br><small>{e(a['reg_no'] or 'not filed')}</small></td>
 <td>{e(a['status'])}<br><small>{e(a['deadline'] or '')}</small></td>
 <td>
 <form class="inline" method="post" action="/admin/captcha/{e(a['app_id'])}/complete">
-<input type="hidden" name="admin_token" value="{e(admin_token)}">
 <button class="secondary" type="submit">Complete CAPTCHA</button></form>
 <form class="inline" method="post" action="/admin/reply/{e(a['app_id'])}">
-<input type="hidden" name="admin_token" value="{e(admin_token)}">
 <input type="hidden" name="evasive" value="1">
 <button class="secondary" type="submit">Add evasive reply</button></form>
 <form class="inline" method="post" action="/admin/confirmation/{e(a['app_id'])}/restore">
-<input type="hidden" name="admin_token" value="{e(admin_token)}">
 <button class="secondary" type="submit">Restore confirmation page</button></form>
 </td></tr>"""
         for a in applications
@@ -329,7 +346,6 @@ def clock_page(now: str, applications: list[Any], timeout_next: bool, skew: int,
 CAPTCHA, a portal reply, or a clock passing.</p>
 <div class="notice">Mock date/time: <strong>{e(now)}</strong></div>
 <form method="post" action="/admin/clock">
-<input type="hidden" name="admin_token" value="{e(admin_token)}">
 <label for="days">Advance the mock clock (days)</label>
 <div class="row"><input id="days" name="days" type="number" value="31" min="1">
 <div style="align-self:end"><button type="submit">Advance</button></div></div>
@@ -339,7 +355,6 @@ CAPTCHA, a portal reply, or a clock passing.</p>
 <h3>Failure-mode switches</h3>
 <p class="lede">These apply to the next filing only, then reset.</p>
 <form method="post" action="/admin/simulate">
-<input type="hidden" name="admin_token" value="{e(admin_token)}">
 <label style="display:inline;font-weight:400"><input type="checkbox" name="timeout_next_filing" value="1" {'checked' if timeout_next else ''}>
 Timeout after payment, before the confirmation page renders</label><br>
 <label for="skew">Show a deadline that is wrong by (days)</label>

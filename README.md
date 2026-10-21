@@ -15,20 +15,25 @@ every screen.
 
 | Capability | Status |
 |---|---|
-| Multilingual intake (English, Telugu, Hindi) with one follow-up per missing field | Working |
+| Operator accounts (hashed tokens, add/revoke without a redeploy) on the queue, tracker, tests and CAPTCHA handoff; per-run tokens for citizens | Working |
+| Multilingual intake (English, Telugu, Hindi, Marathi, Kannada, Tamil) with one follow-up per missing field | Working |
 | Multi-label triage: RTI, grievance, mixed, exempt, uncertain, with cited reasons | Working |
-| Section 8(1)(j) exemption screen that stops filing and opens a review queue | Working |
+| Section 8(1)(j) review routing with an owner: claim, 48-hour target, overdue marking, release or uphold, per-operator audit | Working |
+| Jurisdiction registry: all 36 states and union territories routed, 4 with verified PIO entries | Working |
 | Life-and-liberty urgency track (Section 7(1), 48 hours) | Working |
 | Central vs state routing to a PIO, registry source ID and retrieval time, confidence threshold | Working |
 | Query rewriter: splits compound asks, turns "why" into record requests, explains each change | Working |
-| Fee card (Rs 10; nil for BPL where the seeded rules say so) | Working |
+| Fee card (Rs 10 under the 2012 Fee Rules; nil for BPL under section 7(5)) | Working |
 | Hard approval gate enforced by SQLite triggers, HMAC approval token, idempotent actions | Working |
 | Playwright filing that stops at the portal's CAPTCHA for a human handoff | Working |
 | Independent verifier that re-opens the confirmation page and compares values | Working |
 | Deadline tracker, Section 6(3) transfer following, Section 19 first-appeal drafter | Working |
+| Durable deadline worker: queued checks run on a timer, so a lapsed deadline needs nobody watching | Working |
+| Portal adapter seam: HTTP, Playwright and recorded-fixture transports behind one interface | Working |
 | Evidence ledger and reasoning timeline in the UI | Working |
-| Evaluation harness: TC1–TC4 plus X1–X10 | 14/14 passing |
+| Evaluation harness: TC1–TC4 plus X1–X12 | 16/16 passing |
 | Similar past RTI retrieval (synthetic precedents) | Working, optional feature |
+| Citizen-request annotation: consent + redaction, two independent labels, kappa, adjudication, frozen SHA-256 split | Working; 0 of 100 rows collected |
 
 Deliberately not built: voice input (first stretch item in the plan's cut order),
 automated CAPTCHA/OTP solving, real payments, real portals.
@@ -50,6 +55,21 @@ Open:
 - Agent + dashboard: <http://127.0.0.1:8000>
 - Mock portal: <http://127.0.0.1:8001>
 - Demo console (clock, CAPTCHA handoff, failure switches): <http://127.0.0.1:8001/admin/clock>
+  — sign in once with `RTI_ADMIN_TOKEN` (`rti-demo-admin` locally). The token is never
+  rendered into a page.
+
+The **Assistant** tab works as a citizen: type a request, answer a follow-up, approve the
+card. The **Review queue**, **Tracker** and **Test results** tabs, and the CAPTCHA
+handoff, are the operator surface and need an account: click **Operator access** and paste
+a token (`rti-demo-operator` locally; in production the token from `python -m
+scripts.operator add --name ...`, printed once). Each run gets its own run token, so one
+browser cannot open another citizen's run.
+
+A flagged request is work, not a status. Open **Review queue**, **Claim** it, then either
+**Release to filing** (a reason is required) or **Uphold exemption** (the run closes with
+nothing filed). Both write a decision and an audit row against your account name; the
+queue marks anything past its 48-hour target as overdue. `RTI_REVIEW_SLA_HOURS` changes
+the target.
 
 Run the evaluation (both services must be up):
 
@@ -61,6 +81,18 @@ Run the unit and gate tests:
 
 ```bash
 python -m pytest
+```
+
+Collect citizen-request evidence (needs two human annotators; see
+[docs/citizen-data.md](docs/citizen-data.md)):
+
+```bash
+python -m scripts.annotate_server --port 8010
+# contributor: http://127.0.0.1:8010/contribute
+# annotator:   http://127.0.0.1:8010/label?annotator=A
+# adjudicator: http://127.0.0.1:8010/adjudicate?name=C
+python -m scripts.annotate_citizen stats     # progress toward 100
+python -m scripts.annotate_citizen freeze    # refuses below 100 rows or kappa 0.6
 ```
 
 Environment overrides live in [.env.example](.env.example). Defaults work offline.
@@ -162,8 +194,11 @@ time, including the registry lookup used for routing.
 
 [rules/rti_rules.json](rules/rti_rules.json) holds the 30-day period, the 48-hour
 life-and-liberty period, the five-day Section 6(3) transfer, Section 8(1)(j) and the
-Section 19 appeal. Fees and state variations are explicitly marked as seeded
-assumptions. Verify against the official Act text before any real filing.
+Section 19 appeal. Each of those five rules carries a quote, an official URL, a retrieval
+date and a verification flag, and `scripts/check_rules` fails the build if one loses its
+citation. State fee entries are still explicitly marked as unverified seeded assumptions:
+state rules under sections 27 and 28 vary and were not checked here. Verify any state fee
+before a real filing.
 
 ---
 
@@ -178,7 +213,7 @@ of 1,218 (134 `UNKNOWN` excluded):
 | Benchmark | Metric | Score |
 |---|---|---|
 | Section 8(1)(j) classifier | ROC AUC / nested F1 | 0.7170 / 0.2980 |
-| Section 8(1)(j) keyword rule | F1 (baseline) | 0.1324 |
+| Section 8(1)(j) keyword rule | F1 (baseline) | 0.1449 |
 | Multi-label exemptions, 5 sections | macro AP / macro AUC | 0.2269 / 0.7245 |
 | Multi-label, base rate | macro AP | 0.0638 (3.55× lift) |
 | Precedent retrieval | P@10 / MRR | 0.1705 / 0.3452 |
@@ -188,17 +223,20 @@ of 1,218 (134 `UNKNOWN` excluded):
 | Binary selective precision | at 25% / 50% coverage | 0.2177 / 0.1642 |
 | Retrieval, same authority | P@10 vs chance | 0.0274 vs 0.0066 (4.15×) |
 | Source B | documents carrying order text | 17 of 298 (not scoreable) |
-| Citizen requests | labelled file present | no (`bench_citizen_requests`) |
-| Operations, 40 real requests, C=4 | completion / verified | **100% / 92.5%** |
+| Citizen requests | adjudicated rows | **0 of 100** — collection app ready, [protocol](docs/citizen-data.md) |
+| Operations, 40 real requests, C=4 | completion / verified | **100% / 80%** |
+| Exemption review routing | recall / precision / review load | 0.3950 / 0.3072 / 14.11% |
+| Review routing, keyword rule alone | recall | 0.0840 (4.7× lower) |
+| Citizen-phrasing fixtures | rule recall on 140 author-written rows | 1.00 in-sample — **not evidence** |
 
 ```bash
 python -m scripts.bench_all             # runs every benchmark and enforces gates
-python -m scripts.bench_all --with-eval # also runs the 14 scenarios below
+python -m scripts.bench_all --with-eval # also runs the 16 scenarios below
 python -m scripts.bench_all --with-ops  # also runs 40 real requests through the live system
 ```
 
 `bench_all` exits non-zero when a score falls below its floor, and gates on the 14
-scenarios below when their artifact is present. All nine gates currently pass. Full
+scenarios below when their artifact is present. All sixteen gates currently pass. Full
 methodology, calibration numbers and the limitations are in
 [docs/benchmarks.md](docs/benchmarks.md).
 
@@ -224,10 +262,12 @@ shortcut. It needs both services up.
 | X6 | "Why did the officer…" | Rewritten as a records request |
 | X7 | Double-click approve | One filing |
 | X8 | Wrong authority | Section 6(3) transfer, tracker follows |
-| X9 | Telugu/Hindi | Same route as the English request |
+| X9 | Telugu/Hindi/Marathi/Kannada/Tamil | Same route as the English request |
 | X10 | Deadline passes | Section 19 appeal drafted for approval |
+| X11 | Review upheld | Flag claimed, exemption upheld, run closed, nothing filed, decision attributed |
+| X12 | Review released | Flag claimed, release recorded with a reason, run reaches the approval card |
 
-Latest local run: **14/14 passed**. Results are written to `artifacts/eval_results.json`
+Latest local run: **16/16 passed**. Results are written to `artifacts/eval_results.json`
 and stored in the `test_results` table, visible on the dashboard's **Test results** tab.
 Benchmark scores are written to `artifacts/benchmarks.json`.
 
@@ -256,8 +296,15 @@ The Render Free configuration uses `deploy/Dockerfile.portal` for the portal and
 hosted demo uses the portal API rather than launching Chromium; local runs can still
 use Playwright.
 
-Both services must have the same `RTI_APPROVAL_SECRET` and `RTI_ADMIN_TOKEN`. The
-agent's `RTI_PORTAL_URL` must be set to `https://rti-pilot-portal.onrender.com`.
+Both services must have the same `RTI_APPROVAL_SECRET`. The agent additionally needs
+`RTI_OPERATOR_TOKEN` (guards the operator surface) and `RTI_PORTAL_URL` set to
+`https://rti-pilot-portal.onrender.com`. Generate all three with
+`python -m scripts.gen_secrets`, which writes `deploy/.secrets.env`, prints nothing,
+and is safe to re-run with `--force` to rotate.
+
+`RTI_ENV=production` refuses to start on a missing, placeholder, short or reused secret,
+or on a placeholder `RTI_PORTAL_URL`, so a misconfigured deployment fails at boot instead
+of at the first filing.
 
 **Free-tier caveats:** SQLite files live on ephemeral storage and may be reset when a
 service restarts, redeploys, or spins down. Free services sleep after inactivity and
@@ -265,12 +312,16 @@ take time to wake; the workspace's free instance-hours are shared between servic
 Use this deployment for demos/evaluation, not durable storage or always-on service.
 For Render setup details, see [deploy/README.md](deploy/README.md).
 
-**Verified on 2026-10-21.** Both services answer: portal `/healthz` and agent
-`/api/health` return 200. The deployed agent is nevertheless **misconfigured**: its
-`RTI_PORTAL_URL` is still `https://example.invalid`, so submissions fail after the
-submit step and the deployed evaluation scores 8/14. Set that variable to the portal's
-public URL and redeploy. Production now refuses to start with a placeholder portal URL,
-so this cannot recur silently.
+**Last verified deployment: 2026-10-21.** Both services answered (portal `/healthz` and
+agent `/api/health` 200), but the agent was **misconfigured**: `RTI_PORTAL_URL` still
+pointed at `https://example.invalid`, so filings failed after the submit step and the
+deployed evaluation scored 8/14.
+
+That configuration can no longer start. In `RTI_ENV=production` the agent refuses to boot
+on a placeholder portal URL, a missing or short secret, or one secret reused for two
+roles, and `/api/ready` returns 503 naming the portal it cannot reach. Set
+`RTI_PORTAL_URL` to the portal's public URL, set `RTI_OPERATOR_TOKEN` on the agent, and
+redeploy; then re-run the evaluation against the public URLs before calling it verified.
 
 ---
 
@@ -280,12 +331,24 @@ so this cannot recur silently.
   named rule, which is why the reasoning trail is reproducible and the demo works with
   no API key. The plan's Claude tool-use layer is an optional adapter point, not a
   dependency; adding it should not be allowed to bypass triage or the gate.
-- **The legal rules are seeded.** The 30-day, 48-hour, five-day and exemption rules
-  reflect general knowledge and are cited, but they were not checked against the Act
-  text in this build. State fees are assumptions. Verify before any real filing.
+- **The legal rules are cited, the state fees are not.** Sections 6(3), 7(1), 8(1)(j),
+  19 and the Rs 10 central fee are quoted from the Act and the 2012 Fee Rules, with URL
+  and retrieval date, and a test fails if a citation disappears. The four state fee
+  entries are assumptions made under sections 27 and 28 and are labelled as such. Verify a
+  state fee before relying on it.
+- **The citizen gap was real, and the fixtures that closed it prove nothing.** A
+  synthetic development check (author-written, author-labelled, explicitly not evidence)
+  first put the keyword screen at 0.14 recall on citizen-style wording against 0.39 on
+  appellate text. The screen's vocabulary now covers those phrasings, so it scores 1.00 on
+  the two fixtures it was fitted to — that is memorisation, not generalisation. On
+  appellate text the same rule stays conservative: 0.53 precision at 0.08 recall. Only the
+  real 100-row set can say whether the fix transfers.
 - **SQLite on a single instance.** Fine for a demo; two replicas would diverge.
 - **The portal's CAPTCHA is a placeholder**, not a real challenge. That is intentional:
   automated solving is out of scope.
+- **Filing is proven against the bundled mock only.** The `PortalAdapter` seam means a
+  real portal is a transport, not a rewrite, and the verifier is tested by replaying
+  recorded pages — but no real government portal has been driven.
 - **The deployed agent points at a placeholder portal URL**, so it currently fails 6 of
   14 deployed scenarios. The fix is one environment variable plus a redeploy; it cannot be
   applied from this repository alone.
@@ -297,8 +360,10 @@ so this cannot recur silently.
   and approval time. The portal rejects a token whose destination or fee does not match
   the application.
 - The approval token is stored server-side; the dashboard never renders it.
-- The dashboard does not call operator endpoints directly. The demo console uses a
-  separate token and is clearly labelled as an operator surface.
+- The dashboard does not call operator endpoints directly. The demo console requires a
+  login with `RTI_ADMIN_TOKEN` and is clearly labelled as an operator surface. No page
+  renders either token: opening `/admin/clock` or a `/captcha/` page without signing in
+  shows a sign-in form, not the secret.
 - Text inside a citizen's request is data. Instruction-like sentences are logged as
   evidence, stripped from the draft and cannot change the gate. See X5.
 - Hosted images set `RTI_ENV=production`. In that mode both services refuse to start if

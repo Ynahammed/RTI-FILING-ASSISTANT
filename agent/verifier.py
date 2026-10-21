@@ -13,9 +13,7 @@ import sqlite3
 from datetime import datetime, timedelta
 from typing import Any
 
-import httpx
-
-from agent import db, registry, rules
+from agent import db, portal_adapter, registry, rules
 from common import config
 
 REG_RE = re.compile(r"MOCK/[A-Z]+/R/\d{4}/\d{5}")
@@ -24,38 +22,6 @@ FILED_RE = re.compile(r"Filed \(mock date\)</th><td>([^<]+)</td>")
 AUTH_RE = re.compile(r"Public authority</th><td>([^<]+)</td>")
 TRANSFER_RE = re.compile(r'href="(/transfer/[^"]+)"')
 TRANSFER_TARGET_RE = re.compile(r"Transferred under Section 6\(3\) to\s*<strong>([^<]+)</strong>")
-
-
-def _fetch_http(url: str) -> tuple[int, str]:
-    with httpx.Client(timeout=20, follow_redirects=True) as client:
-        resp = client.get(url)
-    return resp.status_code, resp.text
-
-
-def _fetch_playwright(url: str) -> tuple[int, str]:
-    from playwright.sync_api import sync_playwright
-
-    with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)
-        try:
-            page = browser.new_page()  # a separate context from the filing browser
-            response = page.goto(url, wait_until="domcontentloaded")
-            status = response.status if response else 0
-            return status, page.content()
-        finally:
-            browser.close()
-
-
-def fetch_confirmation(url: str) -> tuple[int, str, str]:
-    if config.FILING_MODE in {"playwright", "auto"}:
-        try:
-            status, html = _fetch_playwright(url)
-            return status, html, "playwright"
-        except Exception:
-            if config.FILING_MODE == "playwright":
-                raise
-    status, html = _fetch_http(url)
-    return status, html, "http"
 
 
 def _parse_display_deadline(text: str) -> datetime | None:
@@ -68,17 +34,23 @@ def _parse_display_deadline(text: str) -> datetime | None:
     return None
 
 
-def verify(conn: sqlite3.Connection, run_id: str) -> dict[str, Any]:
+def verify(
+    conn: sqlite3.Connection,
+    run_id: str,
+    adapter: portal_adapter.PortalAdapter | None = None,
+) -> dict[str, Any]:
     run = db.get_run(conn, run_id)
     app_id = run["portal_app_id"]
     if not app_id:
         raise ValueError("run has no portal application")
+    adapter = adapter or portal_adapter.get_adapter()
 
     try:
-        with httpx.Client(timeout=10) as client:
-            status_body = client.get(f"{config.PORTAL_URL}/api/status/{app_id}").json()
+        status_body = adapter.status(app_id)
     except Exception as exc:
         return _pending(conn, run_id, f"Portal status lookup failed: {exc}")
+    if status_body is None:
+        return _pending(conn, run_id, "Portal status lookup failed or returned no body.")
 
     reg_no = status_body.get("reg_no")
     if not reg_no:
@@ -86,7 +58,7 @@ def verify(conn: sqlite3.Connection, run_id: str) -> dict[str, Any]:
 
     url = f"{config.PORTAL_URL}/confirmation/{reg_no}"
     try:
-        http_status, page, transport = fetch_confirmation(url)
+        http_status, page, transport = adapter.confirmation(reg_no)
     except Exception as exc:
         return _pending(conn, run_id, f"Confirmation page could not be opened: {exc}")
 

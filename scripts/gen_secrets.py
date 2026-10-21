@@ -1,8 +1,9 @@
-"""Generate the two shared secrets a deployment needs.
+"""Generate the secrets a deployment needs.
 
 Writes `deploy/.secrets.env` (gitignored) with fresh values and never prints
 them. Both services must receive the same RTI_APPROVAL_SECRET, or the portal
-will reject every approval token.
+will reject every approval token. The agent also needs RTI_OPERATOR_TOKEN: it
+guards approvals, the review queue and the CAPTCHA handoff.
 
     python -m scripts.gen_secrets            # create if missing
     python -m scripts.gen_secrets --force    # rotate
@@ -17,7 +18,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 OUT = ROOT / "deploy" / ".secrets.env"
 
-KEYS = ("RTI_APPROVAL_SECRET", "RTI_ADMIN_TOKEN")
+KEYS = ("RTI_APPROVAL_SECRET", "RTI_ADMIN_TOKEN", "RTI_OPERATOR_TOKEN")
 
 
 def main() -> int:
@@ -34,6 +35,7 @@ def main() -> int:
             print(f"{OUT.relative_to(ROOT)} already has both secrets; use --force to rotate.")
             return 0
 
+    # Independent values, never reused across roles.
     values = {key: secrets.token_urlsafe(48) for key in KEYS}
     OUT.parent.mkdir(parents=True, exist_ok=True)
     OUT.write_text("\n".join(f"{k}={v}" for k, v in values.items()) + "\n", encoding="utf-8")
@@ -43,6 +45,7 @@ def main() -> int:
         pass
     print(f"Wrote {OUT.relative_to(ROOT)} with {len(values)} secrets (values not shown).")
     print("Set the SAME RTI_APPROVAL_SECRET on both services.")
+    print("Set RTI_OPERATOR_TOKEN on the agent only; it is not needed by the portal.")
     return 0
 
 

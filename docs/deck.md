@@ -24,7 +24,8 @@ knows the wording, the office, the exemption risk and the deadline. That is the 
 
 **Title:** Plan, ask, draft, gate, file, verify, track
 
-- Reads English, Telugu or Hindi; asks one question at a time for missing fields.
+- Reads English, Telugu, Hindi, Marathi, Kannada or Tamil; asks one question at a time
+  for missing fields.
 - Labels the request RTI, grievance, mixed, exempt or uncertain, with a cited reason.
 - Routes central vs state, then department, then PIO, with a confidence score.
 - Rewrites opinion questions into numbered record requests and explains every change.
@@ -56,7 +57,7 @@ database, "verification" would be theatre.
 
 ## Slide 4 — Safety gates
 
-**Title:** Three rules the database enforces, not the prompt
+**Title:** Rules the database enforces, not the prompt
 
 1. A payment or submit action cannot be inserted without an approved approval for the
    same draft and destination.
@@ -67,10 +68,13 @@ database, "verification" would be theatre.
 - CAPTCHA is always a human handoff.
 - Prompt injection inside the request is logged as data, stripped from the draft and
   cannot alter the gate.
-- Section 8(1)(j) stops filing before drafting.
+- A suspected 8(1)(j) request is routed to human review before drafting and is never
+  filed unattended; the deterministic rule still blocks outright.
+- The operator surface needs a token, and each citizen gets a token for their own run
+  only — 401 without it, 403 for someone else's run.
 
-**Speaker note:** These are SQLite triggers. A bug in the agent cannot talk its way
-past them.
+**Speaker note:** The first four are SQLite triggers. A bug in the agent cannot talk its
+way past them, and the operator routes deny by default.
 
 ---
 
@@ -101,8 +105,10 @@ the empty actions table for TC2 and TC3.
 - X6 "why": rewritten as file notings and recorded reasons.
 - X7 double click: one submission, one payment.
 - X8 wrong authority: Section 6(3) transfer, tracker follows.
-- X9 Telugu/Hindi: same route as English.
+- X9 five non-English languages: same route as English.
 - X10 deadline: Section 19 appeal drafted for approval.
+- X11/X12 review: flag claimed, then upheld (closed) or released (approval card) — both
+  recorded against the operator's name.
 
 **Speaker note:** Failures stay in the results view. X3 is deliberately a pending
 verification, not a success.
@@ -111,18 +117,20 @@ verification, not a success.
 
 ## Slide 7 — Results and honest failures
 
-**Title:** 14/14 cases, with limits we can name
+**Title:** 16/16 cases, with limits we can name
 
-- 14/14 evaluation cases pass through the same HTTP interface the UI uses.
-- 19 gate and NLU tests pass.
+- 16/16 evaluation cases pass through the same HTTP interface the UI uses.
+- 156 unit, gate and API tests pass.
+- 40 real RTI-Bench requests through the live system: 100% reached a terminal state,
+  0 duplicates, 0 payments without approval, p95 3.9 s at concurrency 4.
 - The decision engine is deterministic; the Claude tool-use layer is an adapter point,
   not a dependency. The demo runs with no API key.
-- Legal rules are seeded and cited but not verified against the Act text in this build.
-- SQLite is single-instance. Deployment configs are ready; public URLs require our own
-  hosting account.
+- Central rules are quoted from the Act with URL and retrieval date; the four state fee
+  entries are still assumptions.
+- SQLite is single-instance, so a Render restart can reset data.
 
-**Speaker note:** The honest failure is legal verification, not the pipeline. We would
-not file a real RTI without checking the Act text and the state fee.
+**Speaker note:** The honest failure is the state fee, not the pipeline. We would not
+file a real RTI without checking it.
 
 ---
 
@@ -130,8 +138,10 @@ not file a real RTI without checking the Act text and the state fee.
 
 **Title:** From mock to responsible production
 
-- Verify every rule and state fee against the official Act text; add source snapshots.
-- Add a human review console for the exemption queue with an audit trail.
+- Verify the four state fee entries against their state rules; the central rules are
+  already cited.
+- Give the exemption review queue an owner: assignment, an SLA and an audit trail for
+  each decision (the queue itself already exists).
 - Support real portal adapters behind the same filing interface, with rate limits.
 - Add voice intake (the first cut item) once the core is stable.
 - Add a second reviewer for appeals and a notification channel for deadlines.

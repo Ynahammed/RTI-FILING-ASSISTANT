@@ -1,0 +1,40 @@
+{"id": "PAR-001", "text": "Kindly tell me the residence address of the sanitary inspector posted at the Worli ward office.", "personal_data": true, "topic": "officer contact", "language": "en", "synthetic": true}
+{"id": "PAR-002", "text": "I wish to know the monthly pension amount drawn by retired teacher Mr. Deshpande.", "personal_data": true, "topic": "financial", "language": "en", "synthetic": true}
+{"id": "PAR-003", "text": "What is the mobile number linked to the Aadhaar of the ration shop dealer in my village?", "personal_data": true, "topic": "identity", "language": "en", "synthetic": true}
+{"id": "PAR-004", "text": "Please give the caste certificate copy submitted by the candidate who applied for the post of peon.", "personal_data": true, "topic": "identity", "language": "en", "synthetic": true}
+{"id": "PAR-005", "text": "I need the discharge summary of my neighbour's son admitted in Sassoon hospital.", "personal_data": true, "topic": "medical", "language": "en", "synthetic": true}
+{"id": "PAR-006", "text": "Give me the details of the loans written off in the name of the sugar factory owner.", "personal_data": true, "topic": "financial", "language": "en", "synthetic": true}
+{"id": "PAR-007", "text": "Who are the patients admitted in the TB ward? I want their names and addresses.", "personal_data": true, "topic": "medical", "language": "en", "synthetic": true}
+{"id": "PAR-008", "text": "Send me the salary slip of the accountant working in the municipal office.", "personal_data": true, "topic": "financial", "language": "en", "synthetic": true}
+{"id": "PAR-009", "text": "What is the home address of the doctor who signed my wife's death certificate?", "personal_data": true, "topic": "officer contact", "language": "en", "synthetic": true}
+{"id": "PAR-010", "text": "Please provide the bank passbook copy of the beneficiary selected under the housing scheme.", "personal_data": true, "topic": "financial", "language": "en", "synthetic": true}
+{"id": "PAR-011", "text": "Give the list of students who failed in Class 9 with their roll numbers and marks.", "personal_data": true, "topic": "education", "language": "en", "synthetic": true}
+{"id": "PAR-012", "text": "I need the phone number and residence of the person who gave a complaint against my shop.", "personal_data": true, "topic": "complaint identity", "language": "en", "synthetic": true}
+{"id": "PAR-013", "text": "Tell me the name and designation of the officer who rejected my file, and his home address.", "personal_data": true, "topic": "officer contact", "language": "en", "synthetic": true}
+{"id": "PAR-014", "text": "Please share the medical fitness certificate of the candidate selected as constable in the district police.", "personal_data": true, "topic": "medical", "language": "en", "synthetic": true}
+{"id": "PAR-015", "text": "I want the income tax return filed by the builder who constructed our society.", "personal_data": true, "topic": "financial", "language": "en", "synthetic": true}
+{"id": "PAR-016", "text": "Give me the attendance sheet with the signatures of the staff who came late in June.", "personal_data": true, "topic": "employment", "language": "en", "synthetic": true}
+{"id": "PAR-017", "text": "Who was the informant in the case registered against my brother? I want his name and address.", "personal_data": true, "topic": "complaint identity", "language": "en", "synthetic": true}
+{"id": "PAR-018", "text": "कृपया वार्ड अधिकाऱ्याचा घरचा पत्ता आणि मोबाइल नंबर द्या.", "personal_data": true, "topic": "officer contact", "language": "mr", "synthetic": true}
+{"id": "PAR-019", "text": "I need the family details and husband's name of the woman who works as a maid in our building.", "personal_data": true, "topic": "family", "language": "en", "synthetic": true}
+{"id": "PAR-020", "text": "Give me the psychiatric treatment records of the boy who lives in the hostel.", "personal_data": true, "topic": "medical", "language": "en", "synthetic": true}
+{"id": "PAR-021", "text": "How many sanitation workers are employed on contract in the ward, and what is the wage bill?", "personal_data": false, "topic": "staffing", "language": "en", "synthetic": true}
+{"id": "PAR-022", "text": "Please give the total expenditure on the dengue awareness campaign in 2025.", "personal_data": false, "topic": "spending", "language": "en", "synthetic": true}
+{"id": "PAR-023", "text": "What is the name and designation of the officer who approved the tender for the new drainage line?", "personal_data": false, "topic": "accountability", "language": "en", "synthetic": true}
+{"id": "PAR-024", "text": "Give me the official email and office address of the municipal commissioner.", "personal_data": false, "topic": "office", "language": "en", "synthetic": true}
+{"id": "PAR-025", "text": "What was the cost per kilometre of the road concretisation work in the city?", "personal_data": false, "topic": "spending", "language": "en", "synthetic": true}
+{"id": "PAR-026", "text": "Provide the number of patients treated in the OPD last month, ward-wise.", "personal_data": false, "topic": "statistics", "language": "en", "synthetic": true}
+{"id": "PAR-027", "text": "Give me the copies of the agreements signed with the contractor for the sewage plant.", "personal_data": false, "topic": "procurement", "language": "en", "synthetic": true}
+{"id": "PAR-028", "text": "What are the duties of the desk officer at the enquiry counter?", "personal_data": false, "topic": "officer role", "language": "en", "synthetic": true}
+{"id": "PAR-029", "text": "Please share the minutes of the district planning committee for the last three meetings.", "personal_data": false, "topic": "records", "language": "en", "synthetic": true}
+{"id": "PAR-030", "text": "How much was spent on the chief minister's relief fund for flood victims in the district?", "personal_data": false, "topic": "spending", "language": "en", "synthetic": true}
+{"id": "PAR-031", "text": "I want the balance sheet and audit report of the firm running the canteen at the station.", "personal_data": false, "topic": "company", "language": "en", "synthetic": true}
+{"id": "PAR-032", "text": "What is the status of my application for a duplicate ration card?", "personal_data": false, "topic": "own record", "language": "en", "synthetic": true}
+{"id": "PAR-033", "text": "Please give me a copy of the FIR I filed at the Shivaji Nagar police station.", "personal_data": false, "topic": "own record", "language": "en", "synthetic": true}
+{"id": "PAR-034", "text": "How many RTI applications were rejected by the department in 2025-26, and under which sections?", "personal_data": false, "topic": "policy", "language": "en", "synthetic": true}
+{"id": "PAR-035", "text": "Provide the schedule of the water tanker supply for each zone during summer.", "personal_data": false, "topic": "services", "language": "en", "synthetic": true}
+{"id": "PAR-036", "text": "What is the salary scale for the post of junior clerk in the collectorate?", "personal_data": false, "topic": "staffing", "language": "en", "synthetic": true}
+{"id": "PAR-037", "text": "Give the list of contractors blacklisted by the department with the reasons.", "personal_data": false, "topic": "procurement", "language": "en", "synthetic": true}
+{"id": "PAR-038", "text": "What are the timings and holidays of the sub-registrar's office?", "personal_data": false, "topic": "office", "language": "en", "synthetic": true}
+{"id": "PAR-039", "text": "I want the inspection report of the primary health centre at Khed.", "personal_data": false, "topic": "inspection", "language": "en", "synthetic": true}
+{"id": "PAR-040", "text": "Please give the ward-wise list of stray dog sterilisation cases done last year.", "personal_data": false, "topic": "services", "language": "en", "synthetic": true}

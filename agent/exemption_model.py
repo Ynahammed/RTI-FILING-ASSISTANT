@@ -68,6 +68,20 @@ def load_model() -> dict[str, Any] | None:
     return _load()
 
 
+def score(text: str) -> float | None:
+    """Calibrated probability that the text matches the 8(1)(j) pattern.
+
+    Always available when the model file exists. Used to route requests to a human
+    review queue, never to block one.
+    """
+    if not text.strip():
+        return None
+    model = _load()
+    if model is None:
+        return None
+    return probability(model, text)
+
+
 def advisory_flag(text: str) -> dict[str, float] | None:
     """Return {score, threshold} when the advisory classifier flags the text, else None.
 

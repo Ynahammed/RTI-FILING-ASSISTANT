@@ -3,6 +3,8 @@
 const $ = (sel) => document.querySelector(sel);
 const state = {
   runId: null,
+  runToken: null,
+  operatorToken: sessionStorage.getItem("rti_operator_token") || "",
   detail: null,
   portalUrl: "http://127.0.0.1:8001",
   busy: false,
@@ -10,6 +12,8 @@ const state = {
 };
 
 const ACTIVE_STATUSES = new Set(["intake", "awaiting_input", "awaiting_approval", "awaiting_captcha", "filing"]);
+// Mirrors RTI_REVIEW_SLA_HOURS; shown in the queue summary only.
+const REVIEW_SLA_HOURS = 48;
 
 const STATUS_LABELS = {
   intake: "Working",
@@ -71,13 +75,18 @@ function toast(message, isError = false) {
 }
 
 async function api(path, options = {}) {
-  const resp = await fetch(path, {
-    headers: { "Content-Type": "application/json" },
-    ...options,
-  });
+  const headers = { "Content-Type": "application/json" };
+  // The operator token opens the queue, tracker and test views. The run token is
+  // the citizen's own credential and is only meaningful for the run it was issued for.
+  if (state.operatorToken) headers["X-Operator-Token"] = state.operatorToken;
+  if (state.runToken) headers["X-Run-Token"] = state.runToken;
+  const resp = await fetch(path, { headers, ...options });
   let body = null;
   try { body = await resp.json(); } catch (e) { body = null; }
   if (!resp.ok) {
+    if (resp.status === 401 || resp.status === 403) {
+      throw new Error("Operator access is required for this view. Use the Operator access button.");
+    }
     throw new Error((body && (body.detail || body.message)) || `${resp.status} ${resp.statusText}`);
   }
   return body;
@@ -124,6 +133,8 @@ async function sendMessage(text, language) {
     }
     state.detail = detail;
     state.runId = detail.run.run_id;
+    // Returned once, at creation. Kept in memory only: it is the client's claim on this run.
+    if (detail.run_token) state.runToken = detail.run_token;
     $("#chat-input").value = "";
     renderAll();
     schedulePoll();
@@ -370,7 +381,7 @@ function renderMeta() {
   const fields = d.fields || {};
   const rows = [
     ["Run", d.run.run_id],
-    ["Language", { en: "English", te: "Telugu", hi: "Hindi" }[d.run.language] || d.run.language],
+    ["Language", { en: "English", te: "Telugu", hi: "Hindi", mr: "Marathi", kn: "Kannada", ta: "Tamil" }[d.run.language] || d.run.language],
     ["State", fields.state ? fields.state.value : "—"],
     ["Department", fields.department ? fields.department.value.replace(/_/g, " ") : "—"],
     ["Fee", fields.fee_inr ? `₹${fields.fee_inr.value}` : "—"],
@@ -414,25 +425,39 @@ function schedulePoll() {
 
 async function loadReview() {
   const list = $("#review-list");
+  const summary = $("#review-summary");
   list.innerHTML = `<p class="empty-state">Loading the queue…</p>`;
   try {
-    const rows = await api("/api/review-queue");
+    const { reviews: rows, counts } = await api("/api/reviews?status=open");
     const count = $("#review-count");
-    count.textContent = rows.length;
-    count.hidden = rows.length === 0;
+    count.textContent = counts.open;
+    count.hidden = counts.open === 0;
+    summary.textContent = counts.open
+      ? `${counts.open} open · ${counts.unassigned} unclaimed · ${counts.overdue} past the ${REVIEW_SLA_HOURS}h target`
+      : "Nothing is waiting for review.";
     list.innerHTML = rows.length ? rows.map((r) => `
-      <article class="queue-card">
+      <article class="queue-card"${r.overdue ? ' style="border-left-color:#b91c1c"' : ""}>
         <div class="meta">
-          <span class="pill warn">${esc(r.exemption ? r.exemption.label : "flagged")}</span>
+          <span class="pill ${r.overdue ? "bad" : "warn"}">${esc(r.source === "rule" ? "8(1)(j) rule" : "classifier")}</span>
           <span>${esc(r.exemption ? r.exemption.rule_ref : "")}</span>
           <span>${esc(fmtDate(r.created_at, true))}</span>
+          <span class="hint">${r.overdue ? "Overdue" : "Due"} ${esc(fmtDate(r.due_at, true))}</span>
         </div>
         <p class="input">${esc(r.raw_input)}</p>
-        <p class="hint">${esc(r.exemption ? r.exemption.reason : "")}</p>
-        <div class="card-actions"><button class="ghost" data-open-run="${esc(r.run_id)}" type="button">Open reasoning trail</button></div>
+        <p class="hint">${esc(r.reason)}</p>
+        <p class="hint">${r.assigned_to
+          ? `Claimed by <strong>${esc(r.assigned_to)}</strong> ${esc(fmtDate(r.assigned_at, true))}`
+          : "Unclaimed"}</p>
+        <div class="card-actions">
+          ${r.assigned_to ? "" : `<button class="ghost" data-claim-review="${esc(r.run_id)}" type="button">Claim</button>`}
+          <button class="ghost" data-decide-review="${esc(r.run_id)}" data-decision="release" type="button">Release to filing</button>
+          <button class="ghost" data-decide-review="${esc(r.run_id)}" data-decision="uphold" type="button">Uphold exemption</button>
+          <button class="ghost" data-open-run="${esc(r.run_id)}" type="button">Open reasoning trail</button>
+        </div>
       </article>`).join("")
       : `<p class="empty-state">Nothing is waiting for review.</p>`;
   } catch (err) {
+    summary.textContent = "";
     list.innerHTML = `<p class="empty-state">Could not load the queue: ${esc(err.message)}</p>`;
   }
 }
@@ -525,6 +550,7 @@ async function openRun(runId) {
   try {
     const detail = await api(`/api/runs/${runId}`);
     state.runId = runId;
+    state.runToken = null;
     state.detail = detail;
     renderAll();
     schedulePoll();
@@ -555,14 +581,29 @@ function bind() {
     }
   });
 
+  $("#operator-access").addEventListener("click", () => {
+    const current = state.operatorToken ? "connected" : "not set";
+    const token = window.prompt(
+      `Operator token (${current}). The review queue, tracker and test results need it.`,
+      ""
+    );
+    if (token === null) return;
+    state.operatorToken = token.trim();
+    if (state.operatorToken) sessionStorage.setItem("rti_operator_token", state.operatorToken);
+    else sessionStorage.removeItem("rti_operator_token");
+    toast(state.operatorToken ? "Operator access saved for this tab." : "Operator access cleared.");
+    loadReview();
+  });
+
   $("#new-run").addEventListener("click", () => {
     state.runId = null;
+    state.runToken = null;
     state.detail = null;
     clearInterval(state.poll);
     $("#messages").innerHTML = `<div class="empty-state">
       <strong>Tell me what you need to know.</strong>
       <p>For example: “How much did the Public Works Department spend on repairing the road in Ward 12, Pune, during 2025-26?”</p>
-      <p class="hint">English, తెలుగు and हिन्दी are understood. Nothing is filed without your approval.</p>
+      <p class="hint">English, తెలుగు, हिन्दी, मराठी, ಕನ್ನಡ and தமிழ் are understood. Nothing is filed without your approval.</p>
     </div>`;
     renderTimeline();
     $("#timeline").innerHTML = `<p class="empty-state small">Each agent step appears here with its decision, confidence, reason, rule and source.</p>`;
@@ -587,6 +628,42 @@ function bind() {
         await api(`/api/runs/${track.dataset.trackRun}/track`, { method: "POST", body: "{}" });
         toast("Tracker refreshed from the portal.");
         loadTracker();
+      } catch (err) { toast(err.message, true); }
+      return;
+    }
+
+    const claim = event.target.closest("[data-claim-review]");
+    if (claim) {
+      try {
+        await api(`/api/reviews/${claim.dataset.claimReview}/claim`, { method: "POST", body: "{}" });
+        toast("Review claimed. It is yours until you decide it.");
+        loadReview();
+      } catch (err) { toast(err.message, true); }
+      return;
+    }
+
+    const decide = event.target.closest("[data-decide-review]");
+    if (decide) {
+      const releasing = decide.dataset.decision === "release";
+      const note = window.prompt(
+        releasing
+          ? "Why is this safe to file? The reason is stored with your name."
+          : "Short reason for upholding the exemption (optional).",
+        ""
+      );
+      if (note === null) return;
+      try {
+        await api(`/api/reviews/${decide.dataset.decideReview}/decide`, {
+          method: "POST",
+          body: JSON.stringify({ decision: decide.dataset.decision, note }),
+        });
+        toast(releasing ? "Released to filing." : "Exemption upheld; the run is closed.");
+        loadReview();
+        if (state.runId === decide.dataset.decideReview) {
+          state.detail = await api(`/api/runs/${state.runId}`);
+          renderAll();
+          schedulePoll();
+        }
       } catch (err) { toast(err.message, true); }
       return;
     }

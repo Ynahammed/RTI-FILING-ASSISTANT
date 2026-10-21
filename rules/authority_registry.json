@@ -1,6 +1,6 @@
 {
   "version": "2026-10-18",
-  "note": "Synthetic authority registry for the mock pilot. Names and addresses are illustrative; source URLs resolve only inside this project.",
+  "note": "Synthetic registry for a mock portal. Four jurisdictions carry hand-shaped entries. The remaining states and union territories have one explicit generic fallback each: no specific office or officer is invented, confidence is capped below the routing threshold, and the citizen is asked to confirm before anything is filed.",
   "retrieved_at": "2026-10-18T09:30:00+05:30",
   "source_namespace": "https://registry.rti-mock.local/authorities/",
   "authorities": [
@@ -16,7 +16,15 @@
       "source_id": "REG-MH-PWD-01",
       "source_url": "https://registry.rti-mock.local/authorities/MH-PWD-01",
       "retrieved_at": "2026-10-18T09:30:00+05:30",
-      "keywords": ["road", "roads", "highway", "bridge", "pothole", "construction", "public works"]
+      "keywords": [
+        "road",
+        "roads",
+        "highway",
+        "bridge",
+        "pothole",
+        "construction",
+        "public works"
+      ]
     },
     {
       "code": "MH-UD-01",
@@ -30,7 +38,16 @@
       "source_id": "REG-MH-UD-01",
       "source_url": "https://registry.rti-mock.local/authorities/MH-UD-01",
       "retrieved_at": "2026-10-18T09:30:00+05:30",
-      "keywords": ["street light", "streetlight", "garbage", "drainage", "ward", "municipality", "municipal corporation", "encroachment"]
+      "keywords": [
+        "street light",
+        "streetlight",
+        "garbage",
+        "drainage",
+        "ward",
+        "municipality",
+        "municipal corporation",
+        "encroachment"
+      ]
     },
     {
       "code": "MH-HOME-01",
@@ -44,7 +61,14 @@
       "source_id": "REG-MH-HOME-01",
       "source_url": "https://registry.rti-mock.local/authorities/MH-HOME-01",
       "retrieved_at": "2026-10-18T09:30:00+05:30",
-      "keywords": ["police", "fir", "station", "crime", "law and order", "arrest"]
+      "keywords": [
+        "police",
+        "fir",
+        "station",
+        "crime",
+        "law and order",
+        "arrest"
+      ]
     },
     {
       "code": "MH-HEALTH-01",
@@ -58,7 +82,15 @@
       "source_id": "REG-MH-HEALTH-01",
       "source_url": "https://registry.rti-mock.local/authorities/MH-HEALTH-01",
       "retrieved_at": "2026-10-18T09:30:00+05:30",
-      "keywords": ["hospital", "health", "medicine", "ambulance", "doctor", "clinic", "vaccination"]
+      "keywords": [
+        "hospital",
+        "health",
+        "medicine",
+        "ambulance",
+        "doctor",
+        "clinic",
+        "vaccination"
+      ]
     },
     {
       "code": "MH-WATER-01",
@@ -72,7 +104,14 @@
       "source_id": "REG-MH-WATER-01",
       "source_url": "https://registry.rti-mock.local/authorities/MH-WATER-01",
       "retrieved_at": "2026-10-18T09:30:00+05:30",
-      "keywords": ["water supply", "pipeline", "tap", "dam", "irrigation", "water"]
+      "keywords": [
+        "water supply",
+        "pipeline",
+        "tap",
+        "dam",
+        "irrigation",
+        "water"
+      ]
     },
     {
       "code": "TS-PWD-01",
@@ -86,7 +125,14 @@
       "source_id": "REG-TS-PWD-01",
       "source_url": "https://registry.rti-mock.local/authorities/TS-PWD-01",
       "retrieved_at": "2026-10-18T09:30:00+05:30",
-      "keywords": ["road", "roads", "highway", "bridge", "pothole", "construction"]
+      "keywords": [
+        "road",
+        "roads",
+        "highway",
+        "bridge",
+        "pothole",
+        "construction"
+      ]
     },
     {
       "code": "TS-UD-01",
@@ -100,7 +146,14 @@
       "source_id": "REG-TS-UD-01",
       "source_url": "https://registry.rti-mock.local/authorities/TS-UD-01",
       "retrieved_at": "2026-10-18T09:30:00+05:30",
-      "keywords": ["street light", "garbage", "drainage", "ward", "municipality", "encroachment"]
+      "keywords": [
+        "street light",
+        "garbage",
+        "drainage",
+        "ward",
+        "municipality",
+        "encroachment"
+      ]
     },
     {
       "code": "TS-HOME-01",
@@ -114,7 +167,14 @@
       "source_id": "REG-TS-HOME-01",
       "source_url": "https://registry.rti-mock.local/authorities/TS-HOME-01",
       "retrieved_at": "2026-10-18T09:30:00+05:30",
-      "keywords": ["police", "fir", "station", "crime", "law and order", "arrest"]
+      "keywords": [
+        "police",
+        "fir",
+        "station",
+        "crime",
+        "law and order",
+        "arrest"
+      ]
     },
     {
       "code": "TS-HEALTH-01",
@@ -128,7 +188,14 @@
       "source_id": "REG-TS-HEALTH-01",
       "source_url": "https://registry.rti-mock.local/authorities/TS-HEALTH-01",
       "retrieved_at": "2026-10-18T09:30:00+05:30",
-      "keywords": ["hospital", "health", "medicine", "ambulance", "doctor", "clinic"]
+      "keywords": [
+        "hospital",
+        "health",
+        "medicine",
+        "ambulance",
+        "doctor",
+        "clinic"
+      ]
     },
     {
       "code": "KA-PWD-01",
@@ -142,7 +209,14 @@
       "source_id": "REG-KA-PWD-01",
       "source_url": "https://registry.rti-mock.local/authorities/KA-PWD-01",
       "retrieved_at": "2026-10-18T09:30:00+05:30",
-      "keywords": ["road", "roads", "highway", "bridge", "pothole", "construction"]
+      "keywords": [
+        "road",
+        "roads",
+        "highway",
+        "bridge",
+        "pothole",
+        "construction"
+      ]
     },
     {
       "code": "KA-UD-01",
@@ -156,7 +230,14 @@
       "source_id": "REG-KA-UD-01",
       "source_url": "https://registry.rti-mock.local/authorities/KA-UD-01",
       "retrieved_at": "2026-10-18T09:30:00+05:30",
-      "keywords": ["street light", "garbage", "drainage", "ward", "municipality", "encroachment"]
+      "keywords": [
+        "street light",
+        "garbage",
+        "drainage",
+        "ward",
+        "municipality",
+        "encroachment"
+      ]
     },
     {
       "code": "MH-GAD-01",
@@ -170,7 +251,11 @@
       "source_id": "REG-MH-GAD-01",
       "source_url": "https://registry.rti-mock.local/authorities/MH-GAD-01",
       "retrieved_at": "2026-10-18T09:30:00+05:30",
-      "keywords": ["general administration", "service matters", "government office"]
+      "keywords": [
+        "general administration",
+        "service matters",
+        "government office"
+      ]
     },
     {
       "code": "TS-GAD-01",
@@ -184,7 +269,11 @@
       "source_id": "REG-TS-GAD-01",
       "source_url": "https://registry.rti-mock.local/authorities/TS-GAD-01",
       "retrieved_at": "2026-10-18T09:30:00+05:30",
-      "keywords": ["general administration", "service matters", "government office"]
+      "keywords": [
+        "general administration",
+        "service matters",
+        "government office"
+      ]
     },
     {
       "code": "KA-GAD-01",
@@ -198,7 +287,11 @@
       "source_id": "REG-KA-GAD-01",
       "source_url": "https://registry.rti-mock.local/authorities/KA-GAD-01",
       "retrieved_at": "2026-10-18T09:30:00+05:30",
-      "keywords": ["general administration", "service matters", "government office"]
+      "keywords": [
+        "general administration",
+        "service matters",
+        "government office"
+      ]
     },
     {
       "code": "CENTRE-MORTH",
@@ -212,7 +305,13 @@
       "source_id": "REG-CENTRE-MORTH",
       "source_url": "https://registry.rti-mock.local/authorities/CENTRE-MORTH",
       "retrieved_at": "2026-10-18T09:30:00+05:30",
-      "keywords": ["national highway", "nhai", "motor vehicle", "driving licence", "transport policy"]
+      "keywords": [
+        "national highway",
+        "nhai",
+        "motor vehicle",
+        "driving licence",
+        "transport policy"
+      ]
     },
     {
       "code": "CENTRE-MHA",
@@ -226,7 +325,13 @@
       "source_id": "REG-CENTRE-MHA",
       "source_url": "https://registry.rti-mock.local/authorities/CENTRE-MHA",
       "retrieved_at": "2026-10-18T09:30:00+05:30",
-      "keywords": ["passport", "citizenship", "national security", "central armed police", "census"]
+      "keywords": [
+        "passport",
+        "citizenship",
+        "national security",
+        "central armed police",
+        "census"
+      ]
     },
     {
       "code": "CENTRE-HEALTH",
@@ -240,7 +345,12 @@
       "source_id": "REG-CENTRE-HEALTH",
       "source_url": "https://registry.rti-mock.local/authorities/CENTRE-HEALTH",
       "retrieved_at": "2026-10-18T09:30:00+05:30",
-      "keywords": ["national health programme", "drug controller", "medical council", "central hospital"]
+      "keywords": [
+        "national health programme",
+        "drug controller",
+        "medical council",
+        "central hospital"
+      ]
     },
     {
       "code": "CENTRE-RAIL",
@@ -254,7 +364,613 @@
       "source_id": "REG-CENTRE-RAIL",
       "source_url": "https://registry.rti-mock.local/authorities/CENTRE-RAIL",
       "retrieved_at": "2026-10-18T09:30:00+05:30",
-      "keywords": ["railway", "train", "rail", "station", "irctc"]
+      "keywords": [
+        "railway",
+        "train",
+        "rail",
+        "station",
+        "irctc"
+      ]
+    },
+    {
+      "code": "AP-GEN-01",
+      "level": "state",
+      "state": "Andhra Pradesh",
+      "department": "general_administration",
+      "department_label": "General Administration Department",
+      "name": "State Public Information Officer, Andhra Pradesh (generic entry — not verified)",
+      "pio": "Public Information Officer not identified in this pilot; confirm with the public authority.",
+      "address": "Not recorded. Generic state-level fallback.",
+      "source_id": "GENERIC-AP-01",
+      "source_url": "https://rti.gov.in/",
+      "retrieved_at": "2026-10-21T00:00:00+05:30",
+      "keywords": [],
+      "generic": true,
+      "verified": false,
+      "provenance": "Generic fallback added for coverage. It names no specific office and must be confirmed by the citizen before filing."
+    },
+    {
+      "code": "AR-GEN-01",
+      "level": "state",
+      "state": "Arunachal Pradesh",
+      "department": "general_administration",
+      "department_label": "General Administration Department",
+      "name": "State Public Information Officer, Arunachal Pradesh (generic entry — not verified)",
+      "pio": "Public Information Officer not identified in this pilot; confirm with the public authority.",
+      "address": "Not recorded. Generic state-level fallback.",
+      "source_id": "GENERIC-AR-01",
+      "source_url": "https://rti.gov.in/",
+      "retrieved_at": "2026-10-21T00:00:00+05:30",
+      "keywords": [],
+      "generic": true,
+      "verified": false,
+      "provenance": "Generic fallback added for coverage. It names no specific office and must be confirmed by the citizen before filing."
+    },
+    {
+      "code": "AS-GEN-01",
+      "level": "state",
+      "state": "Assam",
+      "department": "general_administration",
+      "department_label": "General Administration Department",
+      "name": "State Public Information Officer, Assam (generic entry — not verified)",
+      "pio": "Public Information Officer not identified in this pilot; confirm with the public authority.",
+      "address": "Not recorded. Generic state-level fallback.",
+      "source_id": "GENERIC-AS-01",
+      "source_url": "https://rti.gov.in/",
+      "retrieved_at": "2026-10-21T00:00:00+05:30",
+      "keywords": [],
+      "generic": true,
+      "verified": false,
+      "provenance": "Generic fallback added for coverage. It names no specific office and must be confirmed by the citizen before filing."
+    },
+    {
+      "code": "BR-GEN-01",
+      "level": "state",
+      "state": "Bihar",
+      "department": "general_administration",
+      "department_label": "General Administration Department",
+      "name": "State Public Information Officer, Bihar (generic entry — not verified)",
+      "pio": "Public Information Officer not identified in this pilot; confirm with the public authority.",
+      "address": "Not recorded. Generic state-level fallback.",
+      "source_id": "GENERIC-BR-01",
+      "source_url": "https://rti.gov.in/",
+      "retrieved_at": "2026-10-21T00:00:00+05:30",
+      "keywords": [],
+      "generic": true,
+      "verified": false,
+      "provenance": "Generic fallback added for coverage. It names no specific office and must be confirmed by the citizen before filing."
+    },
+    {
+      "code": "CG-GEN-01",
+      "level": "state",
+      "state": "Chhattisgarh",
+      "department": "general_administration",
+      "department_label": "General Administration Department",
+      "name": "State Public Information Officer, Chhattisgarh (generic entry — not verified)",
+      "pio": "Public Information Officer not identified in this pilot; confirm with the public authority.",
+      "address": "Not recorded. Generic state-level fallback.",
+      "source_id": "GENERIC-CG-01",
+      "source_url": "https://rti.gov.in/",
+      "retrieved_at": "2026-10-21T00:00:00+05:30",
+      "keywords": [],
+      "generic": true,
+      "verified": false,
+      "provenance": "Generic fallback added for coverage. It names no specific office and must be confirmed by the citizen before filing."
+    },
+    {
+      "code": "GA-GEN-01",
+      "level": "state",
+      "state": "Goa",
+      "department": "general_administration",
+      "department_label": "General Administration Department",
+      "name": "State Public Information Officer, Goa (generic entry — not verified)",
+      "pio": "Public Information Officer not identified in this pilot; confirm with the public authority.",
+      "address": "Not recorded. Generic state-level fallback.",
+      "source_id": "GENERIC-GA-01",
+      "source_url": "https://rti.gov.in/",
+      "retrieved_at": "2026-10-21T00:00:00+05:30",
+      "keywords": [],
+      "generic": true,
+      "verified": false,
+      "provenance": "Generic fallback added for coverage. It names no specific office and must be confirmed by the citizen before filing."
+    },
+    {
+      "code": "GJ-GEN-01",
+      "level": "state",
+      "state": "Gujarat",
+      "department": "general_administration",
+      "department_label": "General Administration Department",
+      "name": "State Public Information Officer, Gujarat (generic entry — not verified)",
+      "pio": "Public Information Officer not identified in this pilot; confirm with the public authority.",
+      "address": "Not recorded. Generic state-level fallback.",
+      "source_id": "GENERIC-GJ-01",
+      "source_url": "https://rti.gov.in/",
+      "retrieved_at": "2026-10-21T00:00:00+05:30",
+      "keywords": [],
+      "generic": true,
+      "verified": false,
+      "provenance": "Generic fallback added for coverage. It names no specific office and must be confirmed by the citizen before filing."
+    },
+    {
+      "code": "HR-GEN-01",
+      "level": "state",
+      "state": "Haryana",
+      "department": "general_administration",
+      "department_label": "General Administration Department",
+      "name": "State Public Information Officer, Haryana (generic entry — not verified)",
+      "pio": "Public Information Officer not identified in this pilot; confirm with the public authority.",
+      "address": "Not recorded. Generic state-level fallback.",
+      "source_id": "GENERIC-HR-01",
+      "source_url": "https://rti.gov.in/",
+      "retrieved_at": "2026-10-21T00:00:00+05:30",
+      "keywords": [],
+      "generic": true,
+      "verified": false,
+      "provenance": "Generic fallback added for coverage. It names no specific office and must be confirmed by the citizen before filing."
+    },
+    {
+      "code": "HP-GEN-01",
+      "level": "state",
+      "state": "Himachal Pradesh",
+      "department": "general_administration",
+      "department_label": "General Administration Department",
+      "name": "State Public Information Officer, Himachal Pradesh (generic entry — not verified)",
+      "pio": "Public Information Officer not identified in this pilot; confirm with the public authority.",
+      "address": "Not recorded. Generic state-level fallback.",
+      "source_id": "GENERIC-HP-01",
+      "source_url": "https://rti.gov.in/",
+      "retrieved_at": "2026-10-21T00:00:00+05:30",
+      "keywords": [],
+      "generic": true,
+      "verified": false,
+      "provenance": "Generic fallback added for coverage. It names no specific office and must be confirmed by the citizen before filing."
+    },
+    {
+      "code": "JH-GEN-01",
+      "level": "state",
+      "state": "Jharkhand",
+      "department": "general_administration",
+      "department_label": "General Administration Department",
+      "name": "State Public Information Officer, Jharkhand (generic entry — not verified)",
+      "pio": "Public Information Officer not identified in this pilot; confirm with the public authority.",
+      "address": "Not recorded. Generic state-level fallback.",
+      "source_id": "GENERIC-JH-01",
+      "source_url": "https://rti.gov.in/",
+      "retrieved_at": "2026-10-21T00:00:00+05:30",
+      "keywords": [],
+      "generic": true,
+      "verified": false,
+      "provenance": "Generic fallback added for coverage. It names no specific office and must be confirmed by the citizen before filing."
+    },
+    {
+      "code": "KL-GEN-01",
+      "level": "state",
+      "state": "Kerala",
+      "department": "general_administration",
+      "department_label": "General Administration Department",
+      "name": "State Public Information Officer, Kerala (generic entry — not verified)",
+      "pio": "Public Information Officer not identified in this pilot; confirm with the public authority.",
+      "address": "Not recorded. Generic state-level fallback.",
+      "source_id": "GENERIC-KL-01",
+      "source_url": "https://rti.gov.in/",
+      "retrieved_at": "2026-10-21T00:00:00+05:30",
+      "keywords": [],
+      "generic": true,
+      "verified": false,
+      "provenance": "Generic fallback added for coverage. It names no specific office and must be confirmed by the citizen before filing."
+    },
+    {
+      "code": "MP-GEN-01",
+      "level": "state",
+      "state": "Madhya Pradesh",
+      "department": "general_administration",
+      "department_label": "General Administration Department",
+      "name": "State Public Information Officer, Madhya Pradesh (generic entry — not verified)",
+      "pio": "Public Information Officer not identified in this pilot; confirm with the public authority.",
+      "address": "Not recorded. Generic state-level fallback.",
+      "source_id": "GENERIC-MP-01",
+      "source_url": "https://rti.gov.in/",
+      "retrieved_at": "2026-10-21T00:00:00+05:30",
+      "keywords": [],
+      "generic": true,
+      "verified": false,
+      "provenance": "Generic fallback added for coverage. It names no specific office and must be confirmed by the citizen before filing."
+    },
+    {
+      "code": "MN-GEN-01",
+      "level": "state",
+      "state": "Manipur",
+      "department": "general_administration",
+      "department_label": "General Administration Department",
+      "name": "State Public Information Officer, Manipur (generic entry — not verified)",
+      "pio": "Public Information Officer not identified in this pilot; confirm with the public authority.",
+      "address": "Not recorded. Generic state-level fallback.",
+      "source_id": "GENERIC-MN-01",
+      "source_url": "https://rti.gov.in/",
+      "retrieved_at": "2026-10-21T00:00:00+05:30",
+      "keywords": [],
+      "generic": true,
+      "verified": false,
+      "provenance": "Generic fallback added for coverage. It names no specific office and must be confirmed by the citizen before filing."
+    },
+    {
+      "code": "ML-GEN-01",
+      "level": "state",
+      "state": "Meghalaya",
+      "department": "general_administration",
+      "department_label": "General Administration Department",
+      "name": "State Public Information Officer, Meghalaya (generic entry — not verified)",
+      "pio": "Public Information Officer not identified in this pilot; confirm with the public authority.",
+      "address": "Not recorded. Generic state-level fallback.",
+      "source_id": "GENERIC-ML-01",
+      "source_url": "https://rti.gov.in/",
+      "retrieved_at": "2026-10-21T00:00:00+05:30",
+      "keywords": [],
+      "generic": true,
+      "verified": false,
+      "provenance": "Generic fallback added for coverage. It names no specific office and must be confirmed by the citizen before filing."
+    },
+    {
+      "code": "MZ-GEN-01",
+      "level": "state",
+      "state": "Mizoram",
+      "department": "general_administration",
+      "department_label": "General Administration Department",
+      "name": "State Public Information Officer, Mizoram (generic entry — not verified)",
+      "pio": "Public Information Officer not identified in this pilot; confirm with the public authority.",
+      "address": "Not recorded. Generic state-level fallback.",
+      "source_id": "GENERIC-MZ-01",
+      "source_url": "https://rti.gov.in/",
+      "retrieved_at": "2026-10-21T00:00:00+05:30",
+      "keywords": [],
+      "generic": true,
+      "verified": false,
+      "provenance": "Generic fallback added for coverage. It names no specific office and must be confirmed by the citizen before filing."
+    },
+    {
+      "code": "NL-GEN-01",
+      "level": "state",
+      "state": "Nagaland",
+      "department": "general_administration",
+      "department_label": "General Administration Department",
+      "name": "State Public Information Officer, Nagaland (generic entry — not verified)",
+      "pio": "Public Information Officer not identified in this pilot; confirm with the public authority.",
+      "address": "Not recorded. Generic state-level fallback.",
+      "source_id": "GENERIC-NL-01",
+      "source_url": "https://rti.gov.in/",
+      "retrieved_at": "2026-10-21T00:00:00+05:30",
+      "keywords": [],
+      "generic": true,
+      "verified": false,
+      "provenance": "Generic fallback added for coverage. It names no specific office and must be confirmed by the citizen before filing."
+    },
+    {
+      "code": "OD-GEN-01",
+      "level": "state",
+      "state": "Odisha",
+      "department": "general_administration",
+      "department_label": "General Administration Department",
+      "name": "State Public Information Officer, Odisha (generic entry — not verified)",
+      "pio": "Public Information Officer not identified in this pilot; confirm with the public authority.",
+      "address": "Not recorded. Generic state-level fallback.",
+      "source_id": "GENERIC-OD-01",
+      "source_url": "https://rti.gov.in/",
+      "retrieved_at": "2026-10-21T00:00:00+05:30",
+      "keywords": [],
+      "generic": true,
+      "verified": false,
+      "provenance": "Generic fallback added for coverage. It names no specific office and must be confirmed by the citizen before filing."
+    },
+    {
+      "code": "PB-GEN-01",
+      "level": "state",
+      "state": "Punjab",
+      "department": "general_administration",
+      "department_label": "General Administration Department",
+      "name": "State Public Information Officer, Punjab (generic entry — not verified)",
+      "pio": "Public Information Officer not identified in this pilot; confirm with the public authority.",
+      "address": "Not recorded. Generic state-level fallback.",
+      "source_id": "GENERIC-PB-01",
+      "source_url": "https://rti.gov.in/",
+      "retrieved_at": "2026-10-21T00:00:00+05:30",
+      "keywords": [],
+      "generic": true,
+      "verified": false,
+      "provenance": "Generic fallback added for coverage. It names no specific office and must be confirmed by the citizen before filing."
+    },
+    {
+      "code": "RJ-GEN-01",
+      "level": "state",
+      "state": "Rajasthan",
+      "department": "general_administration",
+      "department_label": "General Administration Department",
+      "name": "State Public Information Officer, Rajasthan (generic entry — not verified)",
+      "pio": "Public Information Officer not identified in this pilot; confirm with the public authority.",
+      "address": "Not recorded. Generic state-level fallback.",
+      "source_id": "GENERIC-RJ-01",
+      "source_url": "https://rti.gov.in/",
+      "retrieved_at": "2026-10-21T00:00:00+05:30",
+      "keywords": [],
+      "generic": true,
+      "verified": false,
+      "provenance": "Generic fallback added for coverage. It names no specific office and must be confirmed by the citizen before filing."
+    },
+    {
+      "code": "SK-GEN-01",
+      "level": "state",
+      "state": "Sikkim",
+      "department": "general_administration",
+      "department_label": "General Administration Department",
+      "name": "State Public Information Officer, Sikkim (generic entry — not verified)",
+      "pio": "Public Information Officer not identified in this pilot; confirm with the public authority.",
+      "address": "Not recorded. Generic state-level fallback.",
+      "source_id": "GENERIC-SK-01",
+      "source_url": "https://rti.gov.in/",
+      "retrieved_at": "2026-10-21T00:00:00+05:30",
+      "keywords": [],
+      "generic": true,
+      "verified": false,
+      "provenance": "Generic fallback added for coverage. It names no specific office and must be confirmed by the citizen before filing."
+    },
+    {
+      "code": "TN-GEN-01",
+      "level": "state",
+      "state": "Tamil Nadu",
+      "department": "general_administration",
+      "department_label": "General Administration Department",
+      "name": "State Public Information Officer, Tamil Nadu (generic entry — not verified)",
+      "pio": "Public Information Officer not identified in this pilot; confirm with the public authority.",
+      "address": "Not recorded. Generic state-level fallback.",
+      "source_id": "GENERIC-TN-01",
+      "source_url": "https://rti.gov.in/",
+      "retrieved_at": "2026-10-21T00:00:00+05:30",
+      "keywords": [],
+      "generic": true,
+      "verified": false,
+      "provenance": "Generic fallback added for coverage. It names no specific office and must be confirmed by the citizen before filing."
+    },
+    {
+      "code": "TR-GEN-01",
+      "level": "state",
+      "state": "Tripura",
+      "department": "general_administration",
+      "department_label": "General Administration Department",
+      "name": "State Public Information Officer, Tripura (generic entry — not verified)",
+      "pio": "Public Information Officer not identified in this pilot; confirm with the public authority.",
+      "address": "Not recorded. Generic state-level fallback.",
+      "source_id": "GENERIC-TR-01",
+      "source_url": "https://rti.gov.in/",
+      "retrieved_at": "2026-10-21T00:00:00+05:30",
+      "keywords": [],
+      "generic": true,
+      "verified": false,
+      "provenance": "Generic fallback added for coverage. It names no specific office and must be confirmed by the citizen before filing."
+    },
+    {
+      "code": "UP-GEN-01",
+      "level": "state",
+      "state": "Uttar Pradesh",
+      "department": "general_administration",
+      "department_label": "General Administration Department",
+      "name": "State Public Information Officer, Uttar Pradesh (generic entry — not verified)",
+      "pio": "Public Information Officer not identified in this pilot; confirm with the public authority.",
+      "address": "Not recorded. Generic state-level fallback.",
+      "source_id": "GENERIC-UP-01",
+      "source_url": "https://rti.gov.in/",
+      "retrieved_at": "2026-10-21T00:00:00+05:30",
+      "keywords": [],
+      "generic": true,
+      "verified": false,
+      "provenance": "Generic fallback added for coverage. It names no specific office and must be confirmed by the citizen before filing."
+    },
+    {
+      "code": "UK-GEN-01",
+      "level": "state",
+      "state": "Uttarakhand",
+      "department": "general_administration",
+      "department_label": "General Administration Department",
+      "name": "State Public Information Officer, Uttarakhand (generic entry — not verified)",
+      "pio": "Public Information Officer not identified in this pilot; confirm with the public authority.",
+      "address": "Not recorded. Generic state-level fallback.",
+      "source_id": "GENERIC-UK-01",
+      "source_url": "https://rti.gov.in/",
+      "retrieved_at": "2026-10-21T00:00:00+05:30",
+      "keywords": [],
+      "generic": true,
+      "verified": false,
+      "provenance": "Generic fallback added for coverage. It names no specific office and must be confirmed by the citizen before filing."
+    },
+    {
+      "code": "WB-GEN-01",
+      "level": "state",
+      "state": "West Bengal",
+      "department": "general_administration",
+      "department_label": "General Administration Department",
+      "name": "State Public Information Officer, West Bengal (generic entry — not verified)",
+      "pio": "Public Information Officer not identified in this pilot; confirm with the public authority.",
+      "address": "Not recorded. Generic state-level fallback.",
+      "source_id": "GENERIC-WB-01",
+      "source_url": "https://rti.gov.in/",
+      "retrieved_at": "2026-10-21T00:00:00+05:30",
+      "keywords": [],
+      "generic": true,
+      "verified": false,
+      "provenance": "Generic fallback added for coverage. It names no specific office and must be confirmed by the citizen before filing."
+    },
+    {
+      "code": "AN-GEN-01",
+      "level": "state",
+      "state": "Andaman and Nicobar Islands",
+      "department": "general_administration",
+      "department_label": "General Administration Department",
+      "name": "State Public Information Officer, Andaman and Nicobar Islands (generic entry — not verified)",
+      "pio": "Public Information Officer not identified in this pilot; confirm with the public authority.",
+      "address": "Not recorded. Generic state-level fallback.",
+      "source_id": "GENERIC-AN-01",
+      "source_url": "https://rti.gov.in/",
+      "retrieved_at": "2026-10-21T00:00:00+05:30",
+      "keywords": [],
+      "generic": true,
+      "verified": false,
+      "provenance": "Generic fallback added for coverage. It names no specific office and must be confirmed by the citizen before filing."
+    },
+    {
+      "code": "CH-GEN-01",
+      "level": "state",
+      "state": "Chandigarh",
+      "department": "general_administration",
+      "department_label": "General Administration Department",
+      "name": "State Public Information Officer, Chandigarh (generic entry — not verified)",
+      "pio": "Public Information Officer not identified in this pilot; confirm with the public authority.",
+      "address": "Not recorded. Generic state-level fallback.",
+      "source_id": "GENERIC-CH-01",
+      "source_url": "https://rti.gov.in/",
+      "retrieved_at": "2026-10-21T00:00:00+05:30",
+      "keywords": [],
+      "generic": true,
+      "verified": false,
+      "provenance": "Generic fallback added for coverage. It names no specific office and must be confirmed by the citizen before filing."
+    },
+    {
+      "code": "DN-GEN-01",
+      "level": "state",
+      "state": "Dadra and Nagar Haveli and Daman and Diu",
+      "department": "general_administration",
+      "department_label": "General Administration Department",
+      "name": "State Public Information Officer, Dadra and Nagar Haveli and Daman and Diu (generic entry — not verified)",
+      "pio": "Public Information Officer not identified in this pilot; confirm with the public authority.",
+      "address": "Not recorded. Generic state-level fallback.",
+      "source_id": "GENERIC-DN-01",
+      "source_url": "https://rti.gov.in/",
+      "retrieved_at": "2026-10-21T00:00:00+05:30",
+      "keywords": [],
+      "generic": true,
+      "verified": false,
+      "provenance": "Generic fallback added for coverage. It names no specific office and must be confirmed by the citizen before filing."
+    },
+    {
+      "code": "DL-GEN-01",
+      "level": "state",
+      "state": "Delhi",
+      "department": "general_administration",
+      "department_label": "General Administration Department",
+      "name": "State Public Information Officer, Delhi (generic entry — not verified)",
+      "pio": "Public Information Officer not identified in this pilot; confirm with the public authority.",
+      "address": "Not recorded. Generic state-level fallback.",
+      "source_id": "GENERIC-DL-01",
+      "source_url": "https://rti.gov.in/",
+      "retrieved_at": "2026-10-21T00:00:00+05:30",
+      "keywords": [],
+      "generic": true,
+      "verified": false,
+      "provenance": "Generic fallback added for coverage. It names no specific office and must be confirmed by the citizen before filing."
+    },
+    {
+      "code": "JK-GEN-01",
+      "level": "state",
+      "state": "Jammu and Kashmir",
+      "department": "general_administration",
+      "department_label": "General Administration Department",
+      "name": "State Public Information Officer, Jammu and Kashmir (generic entry — not verified)",
+      "pio": "Public Information Officer not identified in this pilot; confirm with the public authority.",
+      "address": "Not recorded. Generic state-level fallback.",
+      "source_id": "GENERIC-JK-01",
+      "source_url": "https://rti.gov.in/",
+      "retrieved_at": "2026-10-21T00:00:00+05:30",
+      "keywords": [],
+      "generic": true,
+      "verified": false,
+      "provenance": "Generic fallback added for coverage. It names no specific office and must be confirmed by the citizen before filing."
+    },
+    {
+      "code": "LA-GEN-01",
+      "level": "state",
+      "state": "Ladakh",
+      "department": "general_administration",
+      "department_label": "General Administration Department",
+      "name": "State Public Information Officer, Ladakh (generic entry — not verified)",
+      "pio": "Public Information Officer not identified in this pilot; confirm with the public authority.",
+      "address": "Not recorded. Generic state-level fallback.",
+      "source_id": "GENERIC-LA-01",
+      "source_url": "https://rti.gov.in/",
+      "retrieved_at": "2026-10-21T00:00:00+05:30",
+      "keywords": [],
+      "generic": true,
+      "verified": false,
+      "provenance": "Generic fallback added for coverage. It names no specific office and must be confirmed by the citizen before filing."
+    },
+    {
+      "code": "LD-GEN-01",
+      "level": "state",
+      "state": "Lakshadweep",
+      "department": "general_administration",
+      "department_label": "General Administration Department",
+      "name": "State Public Information Officer, Lakshadweep (generic entry — not verified)",
+      "pio": "Public Information Officer not identified in this pilot; confirm with the public authority.",
+      "address": "Not recorded. Generic state-level fallback.",
+      "source_id": "GENERIC-LD-01",
+      "source_url": "https://rti.gov.in/",
+      "retrieved_at": "2026-10-21T00:00:00+05:30",
+      "keywords": [],
+      "generic": true,
+      "verified": false,
+      "provenance": "Generic fallback added for coverage. It names no specific office and must be confirmed by the citizen before filing."
+    },
+    {
+      "code": "PY-GEN-01",
+      "level": "state",
+      "state": "Puducherry",
+      "department": "general_administration",
+      "department_label": "General Administration Department",
+      "name": "State Public Information Officer, Puducherry (generic entry — not verified)",
+      "pio": "Public Information Officer not identified in this pilot; confirm with the public authority.",
+      "address": "Not recorded. Generic state-level fallback.",
+      "source_id": "GENERIC-PY-01",
+      "source_url": "https://rti.gov.in/",
+      "retrieved_at": "2026-10-21T00:00:00+05:30",
+      "keywords": [],
+      "generic": true,
+      "verified": false,
+      "provenance": "Generic fallback added for coverage. It names no specific office and must be confirmed by the citizen before filing."
     }
-  ]
+  ],
+  "jurisdictions": [
+    "Andaman and Nicobar Islands",
+    "Andhra Pradesh",
+    "Arunachal Pradesh",
+    "Assam",
+    "Bihar",
+    "Chandigarh",
+    "Chhattisgarh",
+    "Dadra and Nagar Haveli and Daman and Diu",
+    "Delhi",
+    "Goa",
+    "Gujarat",
+    "Haryana",
+    "Himachal Pradesh",
+    "Jammu and Kashmir",
+    "Jharkhand",
+    "Karnataka",
+    "Kerala",
+    "Ladakh",
+    "Lakshadweep",
+    "Madhya Pradesh",
+    "Maharashtra",
+    "Manipur",
+    "Meghalaya",
+    "Mizoram",
+    "Nagaland",
+    "Odisha",
+    "Puducherry",
+    "Punjab",
+    "Rajasthan",
+    "Sikkim",
+    "Tamil Nadu",
+    "Telangana",
+    "Tripura",
+    "Uttar Pradesh",
+    "Uttarakhand",
+    "West Bengal"
+  ],
+  "generic_policy": "An entry with generic=true is never routed silently. agent.agents.routing caps its confidence below rules.routing.confidence_threshold, so the run stops and asks."
 }

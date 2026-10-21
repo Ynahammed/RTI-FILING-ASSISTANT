@@ -150,3 +150,31 @@ def test_verifier_lease_can_be_reused_but_not_forged(conn):
         (run_id, db.now_iso(), lease),
     )
     assert conn.execute("SELECT COUNT(*) AS n FROM verifications").fetchone()["n"] == 1
+
+
+def test_two_verifier_leases_do_not_invalidate_each_other(conn):
+    """Concurrent verifications used to overwrite one global lease row."""
+    first = db.acquire_verifier_lease(conn)
+    second = db.acquire_verifier_lease(conn)
+    assert first != second
+    for token in (first, second):
+        conn.execute(
+            """INSERT INTO verifications(verification_id, run_id, verification_status, matches_intent,
+                   checked_at, writer_token, note)
+               VALUES (?, 'RUN-CONCURRENT', 'pending', 0, ?, ?, 'ok')""",
+            (db.new_id("VER"), db.now_iso(), token),
+        )
+    assert conn.execute("SELECT COUNT(*) AS n FROM verifications").fetchone()["n"] == 2
+
+
+def test_releasing_one_lease_keeps_the_other_valid(conn):
+    first = db.acquire_verifier_lease(conn)
+    second = db.acquire_verifier_lease(conn)
+    db.release_verifier_lease(conn, first)
+    conn.execute(
+        """INSERT INTO verifications(verification_id, run_id, verification_status, matches_intent,
+               checked_at, writer_token, note)
+           VALUES ('VER-Z', 'RUN-2', 'pending', 0, ?, ?, 'ok')""",
+        (db.now_iso(), second),
+    )
+    assert conn.execute("SELECT COUNT(*) AS n FROM verifications").fetchone()["n"] == 1

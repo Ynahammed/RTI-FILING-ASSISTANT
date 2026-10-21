@@ -10,12 +10,12 @@ from pathlib import Path
 from typing import Any
 
 import httpx
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from agent import db, supervisor
+from agent import auth, browser, db, supervisor, worker
 from common import config
 
 app = FastAPI(title="RTI Pilot Agent", docs_url="/api/docs", redoc_url=None)
@@ -25,6 +25,13 @@ app = FastAPI(title="RTI Pilot Agent", docs_url="/api/docs", redoc_url=None)
 def _startup() -> None:
     conn = db.init_db()
     conn.close()
+    if config.WORKER_ENABLED:
+        worker.start_background_worker()
+
+
+@app.on_event("shutdown")
+def _shutdown() -> None:
+    worker.stop_background_worker()
 
 
 class RunRequest(BaseModel):
@@ -41,6 +48,11 @@ class DeclineRequest(BaseModel):
     reason: str = ""
 
 
+class ReviewDecision(BaseModel):
+    decision: str = Field(pattern="^(release|uphold)$")
+    note: str = ""
+
+
 class TestResultIn(BaseModel):
     test_id: str
     run_id: str
@@ -54,8 +66,9 @@ class TestResultIn(BaseModel):
 
 
 @app.get("/api/health")
-def health() -> dict[str, str]:
-    return {"status": "ok", "service": "rti-pilot-agent"}
+def health() -> dict[str, Any]:
+    # Browser launch/reuse counts are cheap evidence that the pool is doing its job.
+    return {"status": "ok", "service": "rti-pilot-agent", "browser": browser.stats()}
 
 
 @app.get("/api/ready")
@@ -103,18 +116,34 @@ def app_config() -> dict[str, str]:
 def rules_summary() -> dict[str, Any]:
     from agent import rules
 
-    return {"version": rules.rules().get("version"), "disclaimer": rules.rules().get("disclaimer"),
-            "sections": rules.rules().get("sections")}
+    return {
+        "version": rules.rules().get("version"),
+        "disclaimer": rules.rules().get("disclaimer"),
+        "sections": rules.rules().get("sections"),
+        "provenance": rules.provenance(),
+    }
 
 
 @app.post("/api/runs")
-def create_run(payload: RunRequest) -> dict[str, Any]:
-    run_id = supervisor.start_run(payload.text, payload.language, payload.overrides)
-    return supervisor.detail(run_id)
+def create_run(request: Request, payload: RunRequest) -> dict[str, Any]:
+    """Create a run and return its run token once.
+
+    The token is the client's only claim on the run. It is returned here and never
+    again; the operator token is not needed to start or answer a request.
+    """
+    conn = db.connect()
+    try:
+        auth.check_run_rate(conn, auth.client_key(request))
+    finally:
+        conn.close()
+    run_id, run_token = supervisor.start_run(payload.text, payload.language, payload.overrides)
+    return {**supervisor.detail(run_id), "run_token": run_token}
 
 
 @app.get("/api/runs")
-def list_runs(limit: int = 30) -> list[dict[str, Any]]:
+def list_runs(
+    limit: int = 30, _: dict[str, Any] = Depends(auth.require_operator)
+) -> list[dict[str, Any]]:
     conn = db.connect()
     try:
         rows = list(conn.execute("SELECT * FROM runs ORDER BY created_at DESC LIMIT ?", (max(1, min(200, limit)),)))
@@ -136,16 +165,23 @@ def list_runs(limit: int = 30) -> list[dict[str, Any]]:
         conn.close()
 
 
-@app.get("/api/runs/{run_id}")
-def get_run(run_id: str) -> dict[str, Any]:
+def _authorize(request: Request, run_id: str) -> None:
+    conn = db.connect()
     try:
-        return supervisor.detail(run_id)
-    except KeyError:
-        raise HTTPException(status_code=404, detail="run not found")
+        auth.authorize_run(request, conn, run_id)
+    finally:
+        conn.close()
+
+
+@app.get("/api/runs/{run_id}")
+def get_run(request: Request, run_id: str) -> dict[str, Any]:
+    _authorize(request, run_id)
+    return supervisor.detail(run_id)
 
 
 @app.post("/api/runs/{run_id}/answer")
-def answer_run(run_id: str, payload: AnswerRequest) -> dict[str, Any]:
+def answer_run(request: Request, run_id: str, payload: AnswerRequest) -> dict[str, Any]:
+    _authorize(request, run_id)
     try:
         return supervisor.answer(run_id, payload.text)
     except KeyError:
@@ -155,7 +191,8 @@ def answer_run(run_id: str, payload: AnswerRequest) -> dict[str, Any]:
 
 
 @app.post("/api/runs/{run_id}/approve")
-def approve_run(run_id: str) -> dict[str, Any]:
+def approve_run(request: Request, run_id: str) -> dict[str, Any]:
+    _authorize(request, run_id)
     try:
         return supervisor.approve(run_id)
     except KeyError:
@@ -165,7 +202,8 @@ def approve_run(run_id: str) -> dict[str, Any]:
 
 
 @app.post("/api/runs/{run_id}/decline")
-def decline_run(run_id: str, payload: DeclineRequest) -> dict[str, Any]:
+def decline_run(request: Request, run_id: str, payload: DeclineRequest) -> dict[str, Any]:
+    _authorize(request, run_id)
     try:
         return supervisor.decline(run_id, payload.reason)
     except KeyError:
@@ -175,7 +213,15 @@ def decline_run(run_id: str, payload: DeclineRequest) -> dict[str, Any]:
 
 
 @app.post("/api/runs/{run_id}/captcha-complete")
-def captcha_complete(run_id: str) -> dict[str, Any]:
+def captcha_complete(
+    run_id: str, operator: dict[str, Any] = Depends(auth.require_operator)
+) -> dict[str, Any]:
+    """The demo operator completes the human handoff; a citizen cannot skip it."""
+    conn = db.connect()
+    try:
+        db.audit(conn, operator, "captcha.complete", run_id)
+    finally:
+        conn.close()
     try:
         return supervisor.complete_captcha(run_id)
     except KeyError:
@@ -183,7 +229,8 @@ def captcha_complete(run_id: str) -> dict[str, Any]:
 
 
 @app.post("/api/runs/{run_id}/track")
-def track_run(run_id: str) -> dict[str, Any]:
+def track_run(request: Request, run_id: str) -> dict[str, Any]:
+    _authorize(request, run_id)
     try:
         return supervisor.track(run_id)
     except KeyError:
@@ -193,39 +240,101 @@ def track_run(run_id: str) -> dict[str, Any]:
 
 
 @app.post("/api/runs/{run_id}/approve-appeal")
-def approve_appeal(run_id: str) -> dict[str, Any]:
+def approve_appeal(request: Request, run_id: str) -> dict[str, Any]:
+    _authorize(request, run_id)
     try:
         return supervisor.approve_appeal(run_id)
     except KeyError:
         raise HTTPException(status_code=404, detail="run not found")
 
 
-@app.get("/api/review-queue")
-def review_queue() -> list[dict[str, Any]]:
+def _review_payload(conn: Any, review: dict[str, Any]) -> dict[str, Any]:
+    detail = db.run_detail(conn, review["run_id"])
+    exemption = next(
+        (d for d in detail["decisions"] if d["agent"] == "exemption_screen"), None
+    )
+    return {
+        **review,
+        "exemption": exemption,
+        "fields": detail["fields"],
+        "evidence": [ev for ev in detail["evidence"] if ev["kind"] == "exemption"],
+    }
+
+
+@app.get("/api/reviews")
+def reviews(
+    status: str = "open", _: dict[str, Any] = Depends(auth.require_operator)
+) -> dict[str, Any]:
+    """The review queue: each flag with an owner, a due time and its decision."""
+    if status not in {"open", "decided", "all"}:
+        raise HTTPException(status_code=422, detail="status must be open, decided or all")
     conn = db.connect()
     try:
-        rows = list(conn.execute(
-            "SELECT run_id, raw_input, created_at FROM runs WHERE status='review_queue' ORDER BY created_at DESC"
-        ))
-        result = []
-        for row in rows:
-            detail = db.run_detail(conn, row["run_id"])
-            exemption = next(
-                (d for d in detail["decisions"] if d["agent"] == "exemption_screen"), None
-            )
-            result.append({
-                **dict(row),
-                "exemption": exemption,
-                "fields": detail["fields"],
-                "evidence": [ev for ev in detail["evidence"] if ev["kind"] == "exemption"],
-            })
-        return result
+        rows = db.list_reviews(conn, None if status == "all" else status)
+        return {
+            "counts": db.review_counts(conn),
+            "reviews": [_review_payload(conn, row) for row in rows],
+        }
+    finally:
+        conn.close()
+
+
+@app.get("/api/review-queue")
+def review_queue(_: dict[str, Any] = Depends(auth.require_operator)) -> list[dict[str, Any]]:
+    """Compatibility view of the open queue. `/api/reviews` is the full surface."""
+    conn = db.connect()
+    try:
+        return [_review_payload(conn, row) for row in db.list_reviews(conn, "open")]
+    finally:
+        conn.close()
+
+
+@app.post("/api/reviews/{run_id}/claim")
+def claim_review(
+    run_id: str, operator: dict[str, Any] = Depends(auth.require_operator)
+) -> dict[str, Any]:
+    conn = db.connect()
+    try:
+        db.claim_review(conn, run_id, operator)
+        return {"review": _review_payload(conn, dict(db.get_review(conn, run_id))), "counts": db.review_counts(conn)}
+    except KeyError:
+        raise HTTPException(status_code=404, detail="no review for that run")
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+    finally:
+        conn.close()
+
+
+@app.post("/api/reviews/{run_id}/decide")
+def decide_review(
+    run_id: str,
+    payload: ReviewDecision,
+    operator: dict[str, Any] = Depends(auth.require_operator),
+) -> dict[str, Any]:
+    """Release a flagged request back into filing, or uphold the exemption."""
+    try:
+        return supervisor.resume_review(run_id, payload.decision, operator, payload.note)
+    except KeyError:
+        raise HTTPException(status_code=404, detail="no review for that run")
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+
+
+@app.get("/api/audit")
+def audit_trail(
+    limit: int = 50, _: dict[str, Any] = Depends(auth.require_operator)
+) -> list[dict[str, Any]]:
+    conn = db.connect()
+    try:
+        return db.audit_log(conn, limit)
     finally:
         conn.close()
 
 
 @app.post("/api/tests")
-def save_test(payload: TestResultIn) -> dict[str, Any]:
+def save_test(
+    payload: TestResultIn, operator: dict[str, Any] = Depends(auth.require_operator)
+) -> dict[str, Any]:
     conn = db.connect()
     try:
         db.save_test_result(
@@ -239,7 +348,7 @@ def save_test(payload: TestResultIn) -> dict[str, Any]:
 
 
 @app.get("/api/tests")
-def test_results() -> list[dict[str, Any]]:
+def test_results(_: dict[str, Any] = Depends(auth.require_operator)) -> list[dict[str, Any]]:
     conn = db.connect()
     try:
         rows = list(conn.execute("SELECT * FROM test_results ORDER BY created_at, test_id"))
@@ -254,7 +363,7 @@ def test_results() -> list[dict[str, Any]]:
 
 
 @app.get("/api/portal-clock")
-def portal_clock() -> dict[str, Any]:
+def portal_clock(_: dict[str, Any] = Depends(auth.require_operator)) -> dict[str, Any]:
     try:
         with httpx.Client(timeout=5) as client:
             clock = client.get(f"{config.PORTAL_URL}/api/clock").json()
@@ -265,7 +374,7 @@ def portal_clock() -> dict[str, Any]:
 
 
 @app.get("/api/tracker")
-def tracker_view() -> list[dict[str, Any]]:
+def tracker_view(_: dict[str, Any] = Depends(auth.require_operator)) -> list[dict[str, Any]]:
     conn = db.connect()
     try:
         rows = list(conn.execute(

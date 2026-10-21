@@ -16,6 +16,7 @@ import pytest
 ROOT = Path(__file__).resolve().parent.parent
 STRONG_A = "a" * 40
 STRONG_B = "b" * 40
+STRONG_C = "c" * 40
 
 
 def load(**env: str) -> subprocess.CompletedProcess[str]:
@@ -44,7 +45,12 @@ def test_local_accepts_short_custom_secrets() -> None:
 
 
 def test_production_accepts_strong_distinct_secrets() -> None:
-    result = load(RTI_ENV="production", RTI_APPROVAL_SECRET=STRONG_A, RTI_ADMIN_TOKEN=STRONG_B)
+    result = load(
+        RTI_ENV="production",
+        RTI_APPROVAL_SECRET=STRONG_A,
+        RTI_ADMIN_TOKEN=STRONG_B,
+        RTI_OPERATOR_TOKEN=STRONG_C,
+    )
     assert result.returncode == 0, result.stderr
     assert result.stdout.split() == ["production", "False"]
 
@@ -53,38 +59,98 @@ def test_production_accepts_strong_distinct_secrets() -> None:
     "env, message",
     [
         (
-            {"RTI_ENV": "production", "RTI_ADMIN_TOKEN": STRONG_B},
+            {
+                "RTI_ENV": "production",
+                "RTI_ADMIN_TOKEN": STRONG_B,
+                "RTI_OPERATOR_TOKEN": STRONG_C,
+            },
             "RTI_APPROVAL_SECRET must be set",
         ),
         (
-            {"RTI_ENV": "production", "RTI_APPROVAL_SECRET": STRONG_A},
+            {
+                "RTI_ENV": "production",
+                "RTI_APPROVAL_SECRET": STRONG_A,
+                "RTI_OPERATOR_TOKEN": STRONG_C,
+            },
             "RTI_ADMIN_TOKEN must be set",
-        ),
-        (
-            {"RTI_ENV": "production", "RTI_APPROVAL_SECRET": "rti-pilot-demo-secret-change-me", "RTI_ADMIN_TOKEN": STRONG_B},
-            "known placeholder",
-        ),
-        (
-            {"RTI_ENV": "production", "RTI_APPROVAL_SECRET": STRONG_A, "RTI_ADMIN_TOKEN": "rti-demo-admin"},
-            "known placeholder",
-        ),
-        (
-            {"RTI_ENV": "production", "RTI_APPROVAL_SECRET": "replace-with-a-long-random-value", "RTI_ADMIN_TOKEN": STRONG_B},
-            "known placeholder",
-        ),
-        (
-            {"RTI_ENV": "production", "RTI_APPROVAL_SECRET": "short-secret", "RTI_ADMIN_TOKEN": STRONG_B},
-            "at least 32",
-        ),
-        (
-            {"RTI_ENV": "production", "RTI_APPROVAL_SECRET": STRONG_A, "RTI_ADMIN_TOKEN": STRONG_A},
-            "must differ",
         ),
         (
             {
                 "RTI_ENV": "production",
                 "RTI_APPROVAL_SECRET": STRONG_A,
                 "RTI_ADMIN_TOKEN": STRONG_B,
+            },
+            "RTI_OPERATOR_TOKEN must be set",
+        ),
+        (
+            {
+                "RTI_ENV": "production",
+                "RTI_APPROVAL_SECRET": "rti-pilot-demo-secret-change-me",
+                "RTI_ADMIN_TOKEN": STRONG_B,
+                "RTI_OPERATOR_TOKEN": STRONG_C,
+            },
+            "known placeholder",
+        ),
+        (
+            {
+                "RTI_ENV": "production",
+                "RTI_APPROVAL_SECRET": STRONG_A,
+                "RTI_ADMIN_TOKEN": "rti-demo-admin",
+                "RTI_OPERATOR_TOKEN": STRONG_C,
+            },
+            "known placeholder",
+        ),
+        (
+            {
+                "RTI_ENV": "production",
+                "RTI_APPROVAL_SECRET": "replace-with-a-long-random-value",
+                "RTI_ADMIN_TOKEN": STRONG_B,
+                "RTI_OPERATOR_TOKEN": STRONG_C,
+            },
+            "known placeholder",
+        ),
+        (
+            {
+                "RTI_ENV": "production",
+                "RTI_APPROVAL_SECRET": "short-secret",
+                "RTI_ADMIN_TOKEN": STRONG_B,
+                "RTI_OPERATOR_TOKEN": STRONG_C,
+            },
+            "at least 32",
+        ),
+        (
+            {
+                "RTI_ENV": "production",
+                "RTI_APPROVAL_SECRET": STRONG_A,
+                "RTI_ADMIN_TOKEN": STRONG_A,
+                "RTI_OPERATOR_TOKEN": STRONG_C,
+            },
+            "must all differ",
+        ),
+        (
+            {
+                "RTI_ENV": "production",
+                "RTI_APPROVAL_SECRET": STRONG_A,
+                "RTI_ADMIN_TOKEN": STRONG_B,
+                "RTI_OPERATOR_TOKEN": STRONG_B,
+            },
+            "must all differ",
+        ),
+        (
+            {
+                "RTI_ENV": "production",
+                "RTI_APPROVAL_SECRET": STRONG_A,
+                "RTI_ADMIN_TOKEN": STRONG_B,
+                "RTI_OPERATOR_TOKEN": "rti-demo-operator",
+            },
+            "known placeholder",
+        ),
+        (
+            {
+                "RTI_ENV": "production",
+                "RTI_APPROVAL_SECRET": STRONG_A,
+                "RTI_ADMIN_TOKEN": STRONG_B,
+                "RTI_OPERATOR_TOKEN": STRONG_C,
                 "RTI_PORTAL_URL": "https://example.invalid",
             },
             "placeholder",
@@ -98,5 +164,5 @@ def test_production_refuses_unsafe_configuration(env: dict[str, str], message: s
     assert message in result.stderr
     # The error must never echo a secret value.
     for key, value in env.items():
-        if key in ("RTI_APPROVAL_SECRET", "RTI_ADMIN_TOKEN"):
+        if key in ("RTI_APPROVAL_SECRET", "RTI_ADMIN_TOKEN", "RTI_OPERATOR_TOKEN"):
             assert value not in result.stderr

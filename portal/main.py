@@ -5,6 +5,7 @@ Run: uvicorn portal.main:app --port 8001
 
 from __future__ import annotations
 
+import hmac
 import uuid
 from datetime import datetime
 from typing import Any
@@ -24,9 +25,30 @@ def _startup() -> None:
     db.init_db()
 
 
-def check_admin(token: str | None) -> None:
-    if not token or token != config.ADMIN_TOKEN:
-        raise HTTPException(status_code=403, detail="demo operator token required")
+ADMIN_COOKIE = "rti_admin"
+LOGIN_MAX_AGE = 8 * 60 * 60
+
+
+def _cookie_ok(request: Request | None) -> bool:
+    """A console session, set by /admin/login from the token.
+
+    The console used to render the token into its own HTML, so anyone who opened
+    /admin/clock or a CAPTCHA page could read it and drive every operator control.
+    The token is now a cookie the operator enters once; pages never contain it.
+    """
+    if request is None:
+        return False
+    value = request.cookies.get(ADMIN_COOKIE, "")
+    return bool(value) and hmac.compare_digest(value, config.ADMIN_TOKEN)
+
+
+def check_admin(token: str | None, request: Request | None = None) -> None:
+    """Accept the console cookie, or a form token from scripts and the agent."""
+    if _cookie_ok(request):
+        return
+    if token and hmac.compare_digest(token, config.ADMIN_TOKEN):
+        return
+    raise HTTPException(status_code=403, detail="demo operator token required")
 
 
 def _fmt_deadline(app_row: Any) -> str:
@@ -145,7 +167,7 @@ def apply_submit(
 @app.get("/captcha/{app_id}")
 def captcha(app_id: str) -> Any:
     row = _get_app(app_id)
-    return ui.captcha_page(row, config.ADMIN_TOKEN)
+    return ui.captcha_page(row)
 
 
 @app.get("/pay/{app_id}")
@@ -227,21 +249,46 @@ def grievance_submit(name: str = Form(""), body: str = Form("")) -> Any:
 
 
 @app.get("/admin/clock")
-def clock_console() -> Any:
+def clock_console(request: Request) -> Any:
+    if not _cookie_ok(request):
+        return ui.admin_login()
     conn = db.connect()
     try:
         apps = list(conn.execute("SELECT * FROM applications ORDER BY created_at DESC LIMIT 40"))
         now = db.iso(db.mock_now(conn))
         timeout = db.get_setting(conn, "timeout_next_filing", "0") == "1"
         skew = int(db.get_setting(conn, "skew_next_deadline_days", "0") or 0)
-        return ui.clock_page(now, apps, timeout, skew, config.ADMIN_TOKEN)
+        return ui.clock_page(now, apps, timeout, skew)
     finally:
         conn.close()
 
 
+@app.post("/admin/login")
+def admin_login_submit(admin_token: str = Form("")) -> Any:
+    if not admin_token or not hmac.compare_digest(admin_token, config.ADMIN_TOKEN):
+        return ui.admin_login("That token is not the demo operator token.")
+    response = RedirectResponse("/admin/clock", status_code=303)
+    response.set_cookie(
+        ADMIN_COOKIE,
+        config.ADMIN_TOKEN,
+        max_age=LOGIN_MAX_AGE,
+        httponly=True,
+        samesite="lax",
+        secure=config.ENV == "production",
+    )
+    return response
+
+
+@app.post("/admin/logout")
+def admin_logout() -> Any:
+    response = RedirectResponse("/admin/clock", status_code=303)
+    response.delete_cookie(ADMIN_COOKIE)
+    return response
+
+
 @app.post("/admin/clock")
-def clock_advance(admin_token: str = Form(""), days: int = Form(0)) -> Any:
-    check_admin(admin_token)
+def clock_advance(request: Request, admin_token: str = Form(""), days: int = Form(0)) -> Any:
+    check_admin(admin_token, request)
     conn = db.connect()
     try:
         db.advance_clock(conn, max(0, days))
@@ -252,11 +299,12 @@ def clock_advance(admin_token: str = Form(""), days: int = Form(0)) -> Any:
 
 @app.post("/admin/simulate")
 def simulate(
+    request: Request,
     admin_token: str = Form(""),
     timeout_next_filing: str | None = Form(None),
     skew_next_deadline_days: int = Form(0),
 ) -> Any:
-    check_admin(admin_token)
+    check_admin(admin_token, request)
     conn = db.connect()
     try:
         db.set_setting(conn, "timeout_next_filing", "1" if timeout_next_filing else "0")
@@ -267,8 +315,8 @@ def simulate(
 
 
 @app.post("/admin/captcha/{app_id}/complete")
-def admin_captcha(app_id: str, admin_token: str = Form("")) -> Any:
-    check_admin(admin_token)
+def admin_captcha(app_id: str, request: Request, admin_token: str = Form("")) -> Any:
+    check_admin(admin_token, request)
     conn = db.connect()
     try:
         row = conn.execute("SELECT * FROM applications WHERE app_id=?", (app_id,)).fetchone()
@@ -281,8 +329,10 @@ def admin_captcha(app_id: str, admin_token: str = Form("")) -> Any:
 
 
 @app.post("/admin/reply/{app_id}")
-def admin_reply(app_id: str, admin_token: str = Form(""), evasive: str | None = Form(None)) -> Any:
-    check_admin(admin_token)
+def admin_reply(
+    app_id: str, request: Request, admin_token: str = Form(""), evasive: str | None = Form(None)
+) -> Any:
+    check_admin(admin_token, request)
     conn = db.connect()
     try:
         body = (
@@ -297,8 +347,8 @@ def admin_reply(app_id: str, admin_token: str = Form(""), evasive: str | None = 
 
 
 @app.post("/admin/confirmation/{app_id}/restore")
-def admin_restore(app_id: str, admin_token: str = Form("")) -> Any:
-    check_admin(admin_token)
+def admin_restore(app_id: str, request: Request, admin_token: str = Form("")) -> Any:
+    check_admin(admin_token, request)
     conn = db.connect()
     try:
         conn.execute("UPDATE applications SET confirmation_available=1 WHERE app_id=?", (app_id,))

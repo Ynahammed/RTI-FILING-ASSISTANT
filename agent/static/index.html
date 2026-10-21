@@ -17,6 +17,7 @@
   </div>
   <div class="top-actions">
     <span class="badge mock">MOCK PORTAL · SYNTHETIC DATA</span>
+    <button id="operator-access" class="ghost small" type="button">Operator access</button>
     <a id="portal-link" class="ghost" href="#" target="_blank" rel="noopener">Open mock portal ↗</a>
   </div>
 </header>
@@ -40,7 +41,7 @@
           <div class="empty-state">
             <strong>Tell me what you need to know.</strong>
             <p>For example: “How much did the Public Works Department spend on repairing the road in Ward 12, Pune, during 2025-26?”</p>
-            <p class="hint">English, తెలుగు and हिन्दी are understood. Nothing is filed without your approval.</p>
+            <p class="hint">English, తెలుగు, हिन्दी, मराठी, ಕನ್ನಡ and தமிழ் are understood. Nothing is filed without your approval.</p>
           </div>
         </div>
         <form id="chat-form" class="composer" autocomplete="off">
@@ -53,6 +54,9 @@
               <option value="en">English</option>
               <option value="te">తెలుగు</option>
               <option value="hi">हिन्दी</option>
+              <option value="mr">मराठी</option>
+              <option value="kn">ಕನ್ನಡ</option>
+              <option value="ta">தமிழ்</option>
             </select>
             <button type="submit" id="send-btn">Send</button>
           </div>
@@ -85,10 +89,12 @@
     <header class="view-head">
       <div>
         <h2>Review queue</h2>
-        <p>Requests stopped before drafting, usually because a Section 8 exemption fired.</p>
+        <p>Requests flagged before drafting. Claim one to take responsibility, then release
+          it to filing or uphold the exemption. Every decision is audited with your name.</p>
       </div>
       <button class="ghost" data-refresh="review" type="button">Refresh</button>
     </header>
+    <p id="review-summary" class="hint" role="status"></p>
     <div id="review-list" class="cards"></div>
   </section>
 

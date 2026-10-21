@@ -104,9 +104,10 @@ def triage(conn: sqlite3.Connection, run_id: str, parsed: dict[str, Any]) -> dic
     if personal:
         label, confidence = "exempt", 0.92
         reason = (
-            "The request names a third party and asks for personal details (address/phone). "
-            "Section 8(1)(j) applies: personal information unrelated to public activity is exempt "
-            "unless the PIO finds a larger public interest. Filing is blocked pending human review."
+            "The request asks for a private fact about an identifiable person (for example an "
+            "address, phone number, health, family or financial detail). Section 8(1)(j) applies: "
+            "personal information unrelated to public activity is exempt unless the PIO finds a "
+            "larger public interest. Filing is blocked pending human review."
         )
         rule_ref = "8(1)(j)"
     elif action and records:
@@ -164,8 +165,35 @@ def triage(conn: sqlite3.Connection, run_id: str, parsed: dict[str, Any]) -> dic
             source="rules", kind="split",
         )
 
+    # Review routing. The deterministic rule above blocks. The classifier cannot
+    # block, but at its measured threshold it can send a request to a human instead
+    # of filing it automatically: on RTI-Bench that lifts 8(1)(j) recall from 0.076
+    # to 0.386 while routing 13.8% of requests for review. See
+    # scripts/bench_review_routing.py.
+    review: dict[str, float] | None = None
+    if label != "exempt":
+        score = exemption_model.score(parsed.get("information_needed", ""))
+        threshold = rules.review_threshold()
+        if score is not None and score >= threshold:
+            review = {"score": round(score, 4), "threshold": threshold}
+            db.add_decision(
+                conn, run_id, "exemption_screen", "needs_review", _fmt_confidence(score),
+                "A classifier trained on RTI-Bench scores this request above the review threshold "
+                f"({score:.2f} >= {threshold:.2f}) for possible Section 8(1)(j) personal data. It is "
+                "queued for human review rather than filed automatically, and it is not rejected.",
+                "8(1)(j) review", review,
+            )
+            db.add_evidence(
+                conn, run_id, source_id="8(1)(j) review", source_url="",
+                extracted_value=(
+                    f"Classifier score {score:.3f} >= review threshold {threshold:.2f}; "
+                    "sent to the human review queue before drafting."
+                ),
+                source="classifier", kind="exemption_review",
+            )
+
     flag = exemption_model.advisory_flag(parsed.get("information_needed", ""))
-    if flag and label != "exempt":
+    if flag and label != "exempt" and review is None:
         db.add_decision(
             conn, run_id, "exemption_advisory", "advisory", _fmt_confidence(flag["score"]),
             "A classifier trained on RTI-Bench flags possible Section 8(1)(j) personal data in this request. "
@@ -182,8 +210,10 @@ def triage(conn: sqlite3.Connection, run_id: str, parsed: dict[str, Any]) -> dic
             "advisory", suggestion,
         )
 
-    return {"label": label, "confidence": confidence, "reason": reason, "rule_ref": rule_ref,
-            "decision_id": decision_id}
+    return {
+        "label": label, "confidence": confidence, "reason": reason, "rule_ref": rule_ref,
+        "decision_id": decision_id, "review_required": review,
+    }
 
 
 # ---------------------------------------------------------------------- urgency
@@ -245,6 +275,13 @@ def routing(conn: sqlite3.Connection, run_id: str, parsed: dict[str, Any]) -> di
         )
         return {"uncertain": True, "missing": "department", "authority": None, "confidence": 0.2}
 
+    # A generic entry names a jurisdiction, not an office. It is useful for coverage
+    # and useless for filing until a human confirms it, so cap it below the routing
+    # threshold rather than letting a placeholder route itself.
+    if authority.get("generic"):
+        confidence = min(confidence, 0.55)
+        fallback_used = True
+
     db.add_evidence(
         conn, run_id,
         source_id=authority["source_id"], source_url=authority["source_url"],
@@ -266,7 +303,12 @@ def routing(conn: sqlite3.Connection, run_id: str, parsed: dict[str, Any]) -> di
     reason = (
         f"Decided {'central' if level == 'central' else 'state'} first, then department "
         f"'{DEPARTMENT_LABELS.get(department, department)}', then the PIO. "
-        + ("Registry had no exact department entry, so General Administration was used. " if fallback_used else "")
+        + ("Registry had no exact department entry, so a general fallback was used. " if fallback_used else "")
+        + (
+            "This is a generic state-level entry that names no specific office, so the "
+            "citizen is asked to confirm before any filing. "
+            if authority.get("generic") else ""
+        )
         + "If the PIO does not hold the records, Section 6(3) requires transfer within five days."
     )
     db.add_decision(conn, run_id, "routing", "routed", confidence, reason, "6(1) + 6(3)", {
@@ -275,6 +317,7 @@ def routing(conn: sqlite3.Connection, run_id: str, parsed: dict[str, Any]) -> di
         "pio": authority["pio"],
         "source_id": authority["source_id"],
         "level": level,
+        "generic": bool(authority.get("generic")),
         "transfer_fallback": (
             "If another public authority holds these records, transfer the application within five days "
             "under Section 6(3) and inform the applicant."
@@ -413,24 +456,40 @@ def drafting(
 
 
 def fee(conn: sqlite3.Connection, run_id: str, parsed: dict[str, Any]) -> dict[str, Any]:
-    default_fee = rules.fee_default()
+    """Fee for this request: the state's reported value, with its caveats attached."""
+    state = str(parsed.get("state") or "Central")
+    block = rules.state_fee(state)
+    default_fee = int(block.get("fee_inr", rules.fee_default()))
     bpl = bool(parsed["bpl"])
-    exempt = bpl and rules.bpl_exempt()
+    exempt = bpl and bool(block.get("bpl_exempt", rules.bpl_exempt()))
     amount = 0 if exempt else default_fee
+    schedule = block.get("schedule") or []
+    tiers = ", ".join(
+        f"{row['level']} Rs {row['fee_inr']}" for row in schedule if "level" in row
+    )
     if exempt:
         label = "nil_bpl"
         reason = (
-            "Applicant declared BPL, so the seeded rules waive the fee. The BPL declaration is a seeded "
-            "assumption; the portal may ask for proof."
+            f"Applicant declared BPL, and the {state} fee rule exempts BPL applicants, so the "
+            "fee is nil. The portal may still ask for proof of the BPL declaration."
         )
     else:
         label = "standard_fee"
-        reason = (
-            f"Rs {default_fee} is the seeded default application fee. State variations are marked as seeded "
-            "assumptions, not verified law."
-        )
+        source = "the Act and the 2012 Fee Rules" if state == "Central" else f"{state}'s own fee rule"
+        reason = f"Rs {default_fee} is the application fee according to {source}."
+        if state != "Central" and not block.get("verified"):
+            reason += (
+                " That state entry is reported from an official source but not gazette-verified "
+                "in this build, so confirm it before filing."
+            )
+        if tiers:
+            reason += f" The fee is actually tiered by authority level ({tiers}); the authority"
+            reason += " registry does not record a level, so the flat value is charged and this"
+            reason += " limitation is recorded rather than guessed."
     db.add_field(conn, run_id, "fee_inr", str(amount), 0.95, "rules")
     db.add_decision(conn, run_id, "fee", label, 0.92, reason, "fee", {
-        "fee_inr": amount, "bpl": bpl, "seeded_assumption": True,
+        "fee_inr": amount, "bpl": bpl, "state": state,
+        "seeded_assumption": not bool(block.get("verified")),
+        "tiered_schedule": schedule,
     })
     return {"fee_inr": amount, "label": label, "bpl": bpl}

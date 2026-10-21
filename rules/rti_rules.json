@@ -1,33 +1,86 @@
 {
-  "version": "2026-10-19",
-  "disclaimer": "Seeded assumptions for a mock-portal pilot. Verify every section and every state fee against the official RTI Act text (rti.gov.in) before any real filing.",
+  "version": "2026-10-21",
+  "disclaimer": "Sections 6(3), 7(1), 8(1)(j) and 19 are cited to the Act text. State fee entries remain unverified seeded assumptions, because state rules under sections 27 and 28 vary and were not checked for this pilot. Verify before any real filing.",
+  "provenance_notes": "Quotes were checked against the Central Information Commission's copy of the Act and a proofread transcript of the Gazette text on Wikisource. The India Code PDF (indiacode.nic.in/bitstream/123456789/2065/1/aa2005.pdf) is the official publication but returned HTTP 403 to automated fetching.",
   "sections": {
     "6(3)": {
       "title": "Transfer of application",
       "rule": "If the PIO does not hold the records, the application is transferred to the public authority that does, within five days.",
-      "transfer_days": 5
+      "transfer_days": 5,
+      "citations": [
+        {
+          "source": "The Right to Information Act, 2005 (No. 22 of 2005), section 6(3)",
+          "url": "https://cic.gov.in/sites/default/files/RTI-Act_English.pdf",
+          "retrieved_at": "2026-10-21",
+          "quote": "the public authority, to which such application is made, shall transfer the application or such part of it as may be appropriate to that other public authority and inform the applicant immediately about such transfer: Provided that the transfer of an application pursuant to this sub-section shall be made as soon as practicable but in no case later than five days from the date of receipt of the application.",
+          "verified": true
+        }
+      ]
     },
     "7(1)": {
       "title": "Response period",
       "rule": "Records are supplied within thirty days; where the request concerns the life or liberty of a person, within forty-eight hours.",
       "normal_days": 30,
-      "life_liberty_hours": 48
+      "life_liberty_hours": 48,
+      "citations": [
+        {
+          "source": "The Right to Information Act, 2005 (No. 22 of 2005), section 7(1)",
+          "url": "https://cic.gov.in/sites/default/files/RTI-Act_English.pdf",
+          "retrieved_at": "2026-10-21",
+          "quote": "on receipt of a request under section 6 shall, as expeditiously as possible, and in any case within thirty days of the receipt of the request, either provide the information on payment of such fee as may be prescribed or reject the request ... Provided that where the information sought for concerns the life or liberty of a person, the same shall be provided within forty-eight hours of the receipt of the request.",
+          "verified": true
+        }
+      ]
     },
     "8(1)(j)": {
       "title": "Personal information exemption",
       "rule": "Information that is personal to a third party and unrelated to any public activity or interest is exempt unless the PIO is satisfied the larger public interest justifies disclosure.",
-      "blocks_filing_pending_review": true
+      "blocks_filing_pending_review": true,
+      "citations": [
+        {
+          "source": "The Right to Information Act, 2005 (No. 22 of 2005), section 8(1)(j)",
+          "url": "https://cic.gov.in/sites/default/files/RTI-Act_English.pdf",
+          "retrieved_at": "2026-10-21",
+          "quote": "information which relates to personal information the disclosure of which has no relationship to any public activity or interest, or which would cause unwarranted invasion of the privacy of the individual unless the Central Public Information Officer or the State Public Information Officer or the appellate authority, as the case may be, is satisfied that the larger public interest justifies the disclosure of such information",
+          "verified": true
+        }
+      ]
     },
     "19": {
       "title": "First appeal",
       "rule": "A first appeal lies to the first appellate authority within thirty days of the response period expiring, or of receiving a reply.",
-      "appeal_window_days": 30
+      "appeal_window_days": 30,
+      "citations": [
+        {
+          "source": "The Right to Information Act, 2005 (No. 22 of 2005), section 19(1)",
+          "url": "https://cic.gov.in/sites/default/files/RTI-Act_English.pdf",
+          "retrieved_at": "2026-10-21",
+          "quote": "Any person who, does not receive a decision within the time specified in sub-section (1) or clause (a) of sub-section (3) of section 7, or is aggrieved by a decision of the Central Public Information Officer or State Public Information Officer, as the case may be, may within thirty days from the expiry of such period or from the receipt of such a decision prefer an appeal to such officer who is senior in rank",
+          "verified": true
+        }
+      ]
     },
     "fee": {
       "title": "Application fee",
       "default_inr": 10,
       "bpl_exempt": true,
-      "rule": "A fee of ten rupees accompanies the application; applicants below the poverty line are exempt. State variations are seeded assumptions, not verified law."
+      "rule": "A fee of ten rupees accompanies the application; applicants below the poverty line are exempt. State variations are seeded assumptions, not verified law.",
+      "citations": [
+        {
+          "source": "The Right to Information (Regulation of Fee and Cost) Rules, 2012, rule 3",
+          "url": "https://www.pmindia.gov.in/wp-content/uploads/2017/04/RTIRules_2012_English_0.pdf",
+          "retrieved_at": "2026-10-21",
+          "quote": "Application Fee.—An application under sub-section (1) of Section 6 of the Act shall be accompanied by a fee of rupees ten",
+          "verified": true
+        },
+        {
+          "source": "The Right to Information Act, 2005, section 7(5), proviso",
+          "url": "https://cic.gov.in/sites/default/files/RTI-Act_English.pdf",
+          "retrieved_at": "2026-10-21",
+          "quote": "no such fee shall be charged from the persons who are of below poverty line as may be determined by the appropriate Government",
+          "verified": true
+        }
+      ]
     }
   },
   "exemptions": [
@@ -40,10 +93,98 @@
     {"ref": "8(1)(j)", "summary": "Personal information of a third party with no public interest"}
   ],
   "state_assumptions": {
-    "Maharashtra": {"fee_inr": 10, "seeded": true},
-    "Telangana": {"fee_inr": 10, "seeded": true},
-    "Karnataka": {"fee_inr": 10, "seeded": true},
-    "Central": {"fee_inr": 10, "seeded": true}
+    "Maharashtra": {
+      "fee_inr": 10,
+      "bpl_exempt": true,
+      "seeded": true,
+      "verified": false,
+      "why_unverified": "The state's own FAQ states Rs 10 and a BPL exemption, but the operative rule clause and any later amendment could not be read from an official gazette copy in this build. A 2026 gazette was surfaced in search but could not be opened, so currentness is unresolved.",
+      "citations": [
+        {
+          "source": "Maharashtra state RTI FAQ (fee and BPL exemption)",
+          "url": "https://rti.maharashtra.gov.in/pdf/FAQ_RTI.pdf",
+          "retrieved_at": "2026-10-21",
+          "quote": "Rs.10/- is a prescribed fee for RTI application. If the applicant belongs to below poverty line category, he is not require to pay any fee",
+          "verified": false
+        }
+      ]
+    },
+    "Telangana": {
+      "fee_inr": 10,
+      "bpl_exempt": true,
+      "seeded": true,
+      "verified": false,
+      "fee_schedule": [
+        {"level": "village", "fee_inr": 0},
+        {"level": "mandal", "fee_inr": 5},
+        {"level": "other", "fee_inr": 10}
+      ],
+      "why_unverified": "Telangana applies the undivided Andhra Pradesh RTI Fee and Cost Rules, 2005, whose fee is tiered by the level of the public authority. The registry does not record an authority's level, so the agent charges the flat Rs 10 and flags the tiered schedule instead of guessing. No Telangana amendment was found.",
+      "citations": [
+        {
+          "source": "Andhra Pradesh Right to Information (Regulation of Fee and Cost) Rules, 2005, rule 3 (in force in Telangana)",
+          "url": "https://tslsa.telangana.gov.in/rti_rules.pdf",
+          "retrieved_at": "2026-10-21",
+          "quote": "in respect of public authorities at the Village Level—no fee; in respect of public authorities at Mandal Level—Rs.5/- per application; in respect of all other public authorities—Rs.10/- per application",
+          "verified": false
+        },
+        {
+          "source": "Telangana Institute of Rural Development, RTI guidance (BPL exemption)",
+          "url": "https://tgird.telangana.gov.in/rtiact.html",
+          "retrieved_at": "2026-10-21",
+          "quote": "no fees are charged from the persons living below the poverty line",
+          "verified": false
+        }
+      ]
+    },
+    "Karnataka": {
+      "fee_inr": 10,
+      "bpl_exempt": true,
+      "seeded": true,
+      "verified": false,
+      "why_unverified": "The Karnataka Rules and the state RTI form are indexed as stating an initial fee of Rs 10 and a BPL exemption, but the PDFs could not be opened for direct inspection. The state RTI portal does not state the fee.",
+      "citations": [
+        {
+          "source": "Karnataka Right to Information Rules, 2005 (Rule 4, Form-A)",
+          "url": "https://translations.karnataka.gov.in/uploads/media_to_upload1755761182.pdf",
+          "retrieved_at": "2026-10-21",
+          "quote": "with an initial fee of Rs.10 with his application",
+          "verified": false
+        },
+        {
+          "source": "Karnataka government RTI forms (BPL note)",
+          "url": "https://kandaya.karnataka.gov.in/storage/pdf-files/RTI%20Forms.pdf",
+          "retrieved_at": "2026-10-21",
+          "quote": "Person belonging to B.P.L. family need not pay any type of fees",
+          "verified": false
+        }
+      ]
+    },
+    "Central": {
+      "fee_inr": 10,
+      "seeded": true,
+      "verified": true,
+      "citation_section": "fee",
+      "why_unverified": ""
+    }
+  },
+  "exemption_review": {
+    "threshold": 0.42,
+    "policy": "maximise recall subject to precision >= 0.28 and review load <= 16%",
+    "measured": {
+      "recall": 0.3950,
+      "precision": 0.3072,
+      "review_load": 0.1411,
+      "nested_recall": 0.3697,
+      "rule_only_recall": 0.0840,
+      "rows": 1084,
+      "positives": 119
+    },
+    "evaluated_by": "python -m scripts.bench_review_routing",
+    "artifact": "artifacts/review_routing_results.json",
+    "behaviour": "A flagged request is queued for human review and is not filed automatically. It is not rejected.",
+    "seeded": false,
+    "verified": true
   },
   "routing": {
     "confidence_threshold": 0.7,

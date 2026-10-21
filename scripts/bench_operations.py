@@ -38,6 +38,10 @@ OUT = Path("artifacts/operations_results.json")
 AGENT = os.getenv("RTI_AGENT_URL", "http://127.0.0.1:8000").rstrip("/")
 PORTAL = os.getenv("RTI_PORTAL_URL", "http://127.0.0.1:8001").rstrip("/")
 ADMIN = os.getenv("RTI_ADMIN_TOKEN", "rti-demo-admin")
+# Creating, answering and approving a run needs the run token; the harness also
+# reads the review queue and stores nothing, so it acts as the operator.
+OPERATOR = os.getenv("RTI_OPERATOR_TOKEN", "rti-demo-operator")
+HEADERS = {"X-Operator-Token": OPERATOR}
 TERMINAL = {
     "verified", "failed", "review_queue", "declined", "appeal_ready",
     "tracking", "filed_unverified", "redirected",
@@ -81,10 +85,12 @@ def _get(client: httpx.Client, run_id: str) -> dict[str, Any]:
 def _answer(detail: dict[str, Any], fallback: dict[str, str]) -> str:
     """What a clerk would reply: the value implied by the request, else the default."""
     question = ((detail.get("run") or {}).get("pending_question") or "").lower()
-    if "state" in question:
-        return fallback.get("state") or "Maharashtra"
+    # Check the confirmation question first: it contains the words "State Public
+    # Information Officer", which used to be mistaken for the state question.
     if "did you mean" in question:
         return "Yes, that is the right office."
+    if "state" in question:
+        return fallback.get("state") or "Maharashtra"
     if "records or action" in question or "confident" in question:
         return "I want copies of the records, not action."
     if "department" in question or "office" in question:
@@ -120,15 +126,24 @@ def run_one(client: httpx.Client, request: dict[str, Any]) -> dict[str, Any]:
         if detail["run"]["status"] == "awaiting_approval":
             approve_started = time.perf_counter()
             detail = _post(client, f"/api/runs/{run_id}/approve")
+            record["submit_ms"] = round((time.perf_counter() - approve_started) * 1000, 1)
+            captcha_started = time.perf_counter()
             try:
                 detail = _post(client, f"/api/runs/{run_id}/captcha-complete")
             except RuntimeError:
                 pass
+            record["payment_verify_ms"] = round((time.perf_counter() - captcha_started) * 1000, 1)
             deadline = time.time() + POLL_SECONDS
             while detail["run"]["status"] not in TERMINAL and time.time() < deadline:
                 time.sleep(0.5)
                 detail = _get(client, run_id)
             record["filing_ms"] = round((time.perf_counter() - approve_started) * 1000, 1)
+            transports = [
+                (a.get("response") or {}).get("transport")
+                for a in detail.get("actions", [])
+                if a.get("type") in {"submit", "payment"}
+            ]
+            record["transports"] = sorted({t for t in transports if t})
 
         record["status"] = detail["run"]["status"]
         record["reg_no"] = detail["run"].get("reg_no")
@@ -191,7 +206,17 @@ def summarise(records: list[dict[str, Any]], concurrency: int, wall_seconds: flo
             "p50": percentile(latencies, 50),
             "p95": percentile(latencies, 95),
             "max": round(max(latencies), 1) if latencies else 0.0,
+            "submit_p50": percentile([r["submit_ms"] for r in records if r.get("submit_ms")], 50),
+            "submit_p95": percentile([r["submit_ms"] for r in records if r.get("submit_ms")], 95),
+            "payment_verify_p50": percentile(
+                [r["payment_verify_ms"] for r in records if r.get("payment_verify_ms")], 50
+            ),
+            "payment_verify_p95": percentile(
+                [r["payment_verify_ms"] for r in records if r.get("payment_verify_ms")], 95
+            ),
+            "intake_p50": percentile([r["intake_ms"] for r in records if r.get("intake_ms")], 50),
         },
+        "transports": sorted({t for r in records for t in r.get("transports", [])}),
         "concurrency": concurrency,
         "wall_seconds": round(wall_seconds, 1),
         "throughput_runs_per_min": round(attempted / (wall_seconds / 60), 2) if wall_seconds else 0.0,
@@ -219,7 +244,7 @@ def main() -> int:
 
     healthy = True
     try:
-        with httpx.Client(timeout=TIMEOUT) as client:
+        with httpx.Client(timeout=TIMEOUT, headers=HEADERS) as client:
             healthy = client.get(f"{AGENT}/api/health").status_code == 200
             portal_ok = client.get(f"{PORTAL}/healthz").status_code == 200
         healthy = healthy and portal_ok
@@ -231,12 +256,17 @@ def main() -> int:
         return 1
 
     started = time.perf_counter()
-    with httpx.Client(timeout=TIMEOUT) as client:
+    with httpx.Client(timeout=TIMEOUT, headers=HEADERS) as client:
         if args.concurrency <= 1:
             records = [run_one(client, request) for request in requests]
         else:
             with ThreadPoolExecutor(max_workers=args.concurrency) as pool:
-                records = list(pool.map(lambda r: run_one(httpx.Client(timeout=TIMEOUT), r), requests))
+                records = list(
+                    pool.map(
+                        lambda r: run_one(httpx.Client(timeout=TIMEOUT, headers=HEADERS), r),
+                        requests,
+                    )
+                )
     wall = time.perf_counter() - started
 
     summary = summarise(records, args.concurrency, wall)
@@ -261,6 +291,10 @@ def main() -> int:
           f"payments without approval={summary['payments_without_approval']}")
     print(f"latency p50={summary['latency_ms']['p50']}ms p95={summary['latency_ms']['p95']}ms "
           f"throughput={summary['throughput_runs_per_min']}/min at concurrency {args.concurrency}")
+    print(f"  intake p50={summary['latency_ms']['intake_p50']}ms "
+          f"submit p50/p95={summary['latency_ms']['submit_p50']}/{summary['latency_ms']['submit_p95']}ms "
+          f"payment+verify p50/p95={summary['latency_ms']['payment_verify_p50']}/"
+          f"{summary['latency_ms']['payment_verify_p95']}ms transports={summary['transports']}")
     print(f"Wrote {path}")
     return 0
 

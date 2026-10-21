@@ -11,8 +11,12 @@ Three rules are enforced by the database itself, not by prompts:
 
 from __future__ import annotations
 
+import hashlib
+import hmac
 import json
+import secrets
 import sqlite3
+import threading
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -158,12 +162,98 @@ CREATE TABLE IF NOT EXISTS service_leases (
     updated_at TEXT NOT NULL
 );
 
+-- One row per verifier run. A single global lease row was overwritten by every
+-- concurrent verification, so two filings at once could invalidate each other's
+-- token and abort a legitimate write.
+CREATE TABLE IF NOT EXISTS verifier_tokens (
+    token TEXT PRIMARY KEY,
+    created_at TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS precedents (
     precedent_id TEXT PRIMARY KEY,
     title TEXT NOT NULL,
     department TEXT NOT NULL,
     keywords TEXT NOT NULL,
     outcome TEXT NOT NULL
+);
+
+-- A run is readable and answerable only by the client that created it, unless
+-- the caller presents the operator token. The token is stored hashed.
+CREATE TABLE IF NOT EXISTS run_tokens (
+    run_id TEXT PRIMARY KEY,
+    token_hash TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
+
+-- Durable deadline checks. A leased row is claimed by exactly one worker, and an
+-- expired lease is reclaimable, so a crash cannot lose a filing's follow-up.
+CREATE TABLE IF NOT EXISTS jobs (
+    job_id TEXT PRIMARY KEY,
+    run_id TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    due_at TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending',
+    attempts INTEGER NOT NULL DEFAULT 0,
+    lease_until TEXT,
+    worker_id TEXT,
+    last_error TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS jobs_due ON jobs(status, due_at);
+CREATE INDEX IF NOT EXISTS jobs_run ON jobs(run_id, kind);
+
+-- Operator accounts. The token is stored hashed, so a database read does not
+-- yield a usable credential, and rotation is add-then-revoke rather than an edit
+-- to one shared secret. The env token is bootstrapped as the first account.
+CREATE TABLE IF NOT EXISTS operators (
+    operator_id TEXT PRIMARY KEY,
+    name TEXT NOT NULL UNIQUE,
+    token_hash TEXT NOT NULL UNIQUE,
+    role TEXT NOT NULL DEFAULT 'operator',
+    created_at TEXT NOT NULL,
+    revoked_at TEXT
+);
+
+CREATE TABLE IF NOT EXISTS operator_audit (
+    audit_id TEXT PRIMARY KEY,
+    operator_id TEXT,
+    operator_name TEXT NOT NULL,
+    action TEXT NOT NULL,
+    run_id TEXT,
+    detail TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT NOT NULL
+);
+
+-- One row per flagged request. A flag is work with an owner and a deadline, not
+-- a status a request can sit in unnoticed.
+CREATE TABLE IF NOT EXISTS reviews (
+    review_id TEXT PRIMARY KEY,
+    run_id TEXT NOT NULL UNIQUE,
+    reason TEXT NOT NULL,
+    source TEXT NOT NULL,
+    score REAL,
+    status TEXT NOT NULL DEFAULT 'open',
+    assigned_to TEXT,
+    assigned_at TEXT,
+    due_at TEXT NOT NULL,
+    decision TEXT,
+    decided_by TEXT,
+    decided_at TEXT,
+    note TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS reviews_open ON reviews(status, due_at);
+
+-- Shared run-creation limit. In-process counters reset on restart and do not
+-- coordinate two instances; this one lives beside the data it protects.
+CREATE TABLE IF NOT EXISTS rate_limits (
+    key TEXT PRIMARY KEY,
+    window_start REAL NOT NULL,
+    count INTEGER NOT NULL
 );
 
 CREATE TRIGGER IF NOT EXISTS actions_require_approval
@@ -192,7 +282,22 @@ BEGIN
     SELECT RAISE(ABORT, 'VERIFIER_LEASE_REQUIRED: verifications are writable only by the verifier service')
     WHERE NEW.writer_token IS NULL
        OR NOT EXISTS (
-           SELECT 1 FROM service_leases WHERE service = 'verifier' AND token = NEW.writer_token
+           SELECT 1 FROM verifier_tokens WHERE token = NEW.writer_token
+       );
+END;
+"""
+
+# Existing databases still carry the old trigger, which pointed at the single-row
+# service_leases table. Replacing it is idempotent and keeps old data valid.
+VERIFIER_TRIGGER = """
+DROP TRIGGER IF EXISTS verifications_verifier_only;
+CREATE TRIGGER verifications_verifier_only
+BEFORE INSERT ON verifications
+BEGIN
+    SELECT RAISE(ABORT, 'VERIFIER_LEASE_REQUIRED: verifications are writable only by the verifier service')
+    WHERE NEW.writer_token IS NULL
+       OR NOT EXISTS (
+           SELECT 1 FROM verifier_tokens WHERE token = NEW.writer_token
        );
 END;
 """
@@ -222,13 +327,45 @@ def new_id(prefix: str) -> str:
     return f"{prefix}-{uuid.uuid4().hex[:10].upper()}"
 
 
-def init_db(conn: sqlite3.Connection | None = None) -> sqlite3.Connection:
-    own = conn is None
+_schema_lock = threading.Lock()
+_schema_ready: set[str] = set()
+
+
+def bootstrap_operator(conn: sqlite3.Connection, token: str | None = None) -> None:
+    """Make the configured operator token a real account once.
+
+    Only when there are no accounts at all: a later rotation must not be undone by
+    a restart with the old env value still set.
+    """
+    if conn.execute("SELECT 1 FROM operators LIMIT 1").fetchone():
+        return
+    token = token or config.OPERATOR_TOKEN
+    if not token:
+        return
+    conn.execute(
+        "INSERT INTO operators(operator_id, name, token_hash, role, created_at) VALUES (?, ?, ?, 'admin', ?)",
+        (new_id("OP"), "operator", _hash_token(token), now_iso()),
+    )
+
+
+def init_db(conn: sqlite3.Connection | None = None, *, force: bool = False) -> sqlite3.Connection:
+    """Create the schema once per database file per process.
+
+    This used to run `executescript(SCHEMA)` on every run creation. Under
+    concurrency that takes a write lock for DDL on every request and serialises
+    the whole service, which showed up as p95 latency rather than as an error.
+    """
     conn = conn or connect()
-    conn.executescript(SCHEMA)
-    seed_precedents(conn)
-    if own:
-        return conn
+    row = conn.execute("PRAGMA database_list").fetchone()
+    path = str(row["file"] or "")
+    if force or path not in _schema_ready:
+        with _schema_lock:
+            if force or path not in _schema_ready:
+                conn.executescript(SCHEMA)
+                conn.executescript(VERIFIER_TRIGGER)
+                seed_precedents(conn)
+                bootstrap_operator(conn)
+                _schema_ready.add(path)
     return conn
 
 
@@ -251,6 +388,269 @@ def seed_precedents(conn: sqlite3.Connection) -> None:
                title=excluded.title, department=excluded.department,
                keywords=excluded.keywords, outcome=excluded.outcome""",
             (pid, title, dept, keywords, outcome),
+        )
+
+
+# ------------------------------------------------------------------ run tokens
+
+
+def _hash_token(token: str) -> str:
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
+def issue_run_token(conn: sqlite3.Connection, run_id: str) -> str:
+    """Mint the one credential that scopes a client to this run.
+
+    Returned once, at creation, and never stored in plaintext: losing it means
+    starting a new run, not reading someone else's.
+    """
+    token = secrets.token_urlsafe(32)
+    conn.execute(
+        """INSERT INTO run_tokens(run_id, token_hash, created_at) VALUES (?, ?, ?)
+           ON CONFLICT(run_id) DO UPDATE SET token_hash=excluded.token_hash,
+               created_at=excluded.created_at""",
+        (run_id, _hash_token(token), now_iso()),
+    )
+    return token
+
+
+def verify_run_token(conn: sqlite3.Connection, run_id: str, token: str) -> bool:
+    if not token:
+        return False
+    row = conn.execute("SELECT token_hash FROM run_tokens WHERE run_id=?", (run_id,)).fetchone()
+    if not row:
+        return False
+    return hmac.compare_digest(row["token_hash"], _hash_token(token))
+
+
+# ------------------------------------------------------------------ operators
+
+
+def create_operator(conn: sqlite3.Connection, name: str, role: str = "operator") -> tuple[str, str]:
+    """Create an account and return its token once. The database keeps only the hash."""
+    name = name.strip()
+    if not name:
+        raise ValueError("an operator needs a name")
+    if conn.execute("SELECT 1 FROM operators WHERE name=?", (name,)).fetchone():
+        raise ValueError(f"an operator named {name!r} already exists")
+    token = secrets.token_urlsafe(32)
+    operator_id = new_id("OP")
+    conn.execute(
+        "INSERT INTO operators(operator_id, name, token_hash, role, created_at) VALUES (?, ?, ?, ?, ?)",
+        (operator_id, name, _hash_token(token), role, now_iso()),
+    )
+    return operator_id, token
+
+
+def operator_for_token(conn: sqlite3.Connection, token: str) -> sqlite3.Row | None:
+    if not token:
+        return None
+    row = conn.execute(
+        "SELECT * FROM operators WHERE token_hash=? AND revoked_at IS NULL",
+        (_hash_token(token),),
+    ).fetchone()
+    return row
+
+
+def list_operators(conn: sqlite3.Connection) -> list[dict[str, Any]]:
+    rows = conn.execute(
+        "SELECT operator_id, name, role, created_at, revoked_at FROM operators ORDER BY created_at"
+    )
+    return [dict(row) for row in rows]
+
+
+def revoke_operator(conn: sqlite3.Connection, name: str) -> bool:
+    cur = conn.execute(
+        "UPDATE operators SET revoked_at=? WHERE name=? AND revoked_at IS NULL",
+        (now_iso(), name),
+    )
+    return cur.rowcount > 0
+
+
+def audit(
+    conn: sqlite3.Connection,
+    operator: dict[str, Any] | None,
+    action: str,
+    run_id: str | None = None,
+    detail: dict[str, Any] | None = None,
+) -> None:
+    """Record who did what. Every operator mutation writes one of these."""
+    conn.execute(
+        "INSERT INTO operator_audit(audit_id, operator_id, operator_name, action, run_id, detail, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        (
+            new_id("AUD"),
+            (operator or {}).get("operator_id"),
+            (operator or {}).get("name") or "unknown",
+            action,
+            run_id,
+            json.dumps(detail or {}, ensure_ascii=False),
+            now_iso(),
+        ),
+    )
+
+
+def audit_log(conn: sqlite3.Connection, limit: int = 50) -> list[dict[str, Any]]:
+    rows = conn.execute(
+        "SELECT * FROM operator_audit ORDER BY created_at DESC, rowid DESC LIMIT ?",
+        (max(1, min(500, limit)),),
+    )
+    out = []
+    for row in rows:
+        item = dict(row)
+        try:
+            item["detail"] = json.loads(item["detail"] or "{}")
+        except json.JSONDecodeError:
+            pass
+        out.append(item)
+    return out
+
+
+# --------------------------------------------------------------- review queue
+
+DEFAULT_REVIEW_SLA_HOURS = 48
+
+
+def enqueue_review(
+    conn: sqlite3.Connection,
+    run_id: str,
+    *,
+    reason: str,
+    source: str,
+    score: float | None = None,
+    sla_hours: int | None = None,
+) -> None:
+    """Flag a run for human review with an owner slot and an explicit due time."""
+    from datetime import timedelta
+
+    hours = DEFAULT_REVIEW_SLA_HOURS if sla_hours is None else sla_hours
+    due = (datetime.now(timezone.utc) + timedelta(hours=hours)).isoformat(timespec="seconds")
+    conn.execute(
+        """INSERT INTO reviews(review_id, run_id, reason, source, score, due_at, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?)
+           ON CONFLICT(run_id) DO NOTHING""",
+        (new_id("REV"), run_id, reason, source, score, due, now_iso()),
+    )
+
+
+def get_review(conn: sqlite3.Connection, run_id: str) -> sqlite3.Row | None:
+    return conn.execute("SELECT * FROM reviews WHERE run_id=?", (run_id,)).fetchone()
+
+
+def list_reviews(conn: sqlite3.Connection, status: str | None = "open", limit: int = 100) -> list[dict[str, Any]]:
+    sql = """SELECT rv.*, r.raw_input, r.language, r.status AS run_status, r.created_at AS run_created_at
+             FROM reviews rv JOIN runs r ON r.run_id = rv.run_id"""
+    params: tuple[Any, ...] = ()
+    if status:
+        sql += " WHERE rv.status=?"
+        params = (status,)
+    sql += " ORDER BY (rv.status='open') DESC, rv.due_at ASC LIMIT ?"
+    params += (max(1, min(500, limit)),)
+    now = now_iso()
+    out = []
+    for row in conn.execute(sql, params):
+        item = dict(row)
+        item["overdue"] = item["status"] == "open" and item["due_at"] < now
+        out.append(item)
+    return out
+
+
+def claim_review(conn: sqlite3.Connection, run_id: str, operator: dict[str, Any]) -> sqlite3.Row:
+    """Take responsibility for an open review. Idempotent for the same operator.
+
+    A second operator cannot silently take over a review that is already assigned;
+    the queue is small and a lost assignment is a lost decision.
+    """
+    review = get_review(conn, run_id)
+    if not review:
+        raise KeyError(run_id)
+    if review["status"] != "open":
+        raise ValueError("this review has already been decided")
+    name = operator.get("name") or "operator"
+    if review["assigned_to"] and review["assigned_to"] != name:
+        raise ValueError(f"this review is assigned to {review['assigned_to']}")
+    if not review["assigned_to"]:
+        conn.execute(
+            "UPDATE reviews SET assigned_to=?, assigned_at=? WHERE run_id=? AND assigned_to IS NULL",
+            (name, now_iso(), run_id),
+        )
+    audit(conn, operator, "review.claim", run_id)
+    refreshed = get_review(conn, run_id)
+    assert refreshed is not None
+    return refreshed
+
+
+def decide_review(
+    conn: sqlite3.Connection,
+    run_id: str,
+    operator: dict[str, Any],
+    decision: str,
+    note: str = "",
+) -> sqlite3.Row:
+    """Close a review. The deciding operator must hold the assignment."""
+    if decision not in {"release", "uphold"}:
+        raise ValueError("decision must be 'release' or 'uphold'")
+    review = get_review(conn, run_id)
+    if not review:
+        raise KeyError(run_id)
+    if review["status"] != "open":
+        raise ValueError("this review has already been decided")
+    name = operator.get("name") or "operator"
+    if review["assigned_to"] != name:
+        raise ValueError("claim this review before deciding it")
+    if decision == "release" and not note.strip():
+        raise ValueError("releasing a flagged request needs a short reason on the record")
+    conn.execute(
+        """UPDATE reviews SET status='decided', decision=?, decided_by=?, decided_at=?, note=?
+           WHERE run_id=?""",
+        (decision, name, now_iso(), note.strip(), run_id),
+    )
+    audit(conn, operator, f"review.{decision}", run_id, {"note": note.strip()})
+    decided = get_review(conn, run_id)
+    assert decided is not None
+    return decided
+
+
+def review_counts(conn: sqlite3.Connection) -> dict[str, int]:
+    now = now_iso()
+    open_rows = conn.execute("SELECT due_at FROM reviews WHERE status='open'").fetchall()
+    return {
+        "open": len(open_rows),
+        "overdue": sum(1 for row in open_rows if row["due_at"] < now),
+        "unassigned": sum(
+            1 for row in conn.execute("SELECT assigned_to FROM reviews WHERE status='open'")
+            if not row["assigned_to"]
+        ),
+    }
+
+
+# ----------------------------------------------------------------- rate limit
+
+
+def check_rate_limit(conn: sqlite3.Connection, key: str, limit: int, window_seconds: float = 60.0) -> None:
+    """Sliding-window limit shared through SQLite, so a restart or a second
+    instance does not hand out a fresh budget."""
+    if limit <= 0:
+        return
+    import time as _time
+
+    from fastapi import HTTPException
+
+    now = _time.time()
+    row = conn.execute("SELECT window_start, count FROM rate_limits WHERE key=?", (key,)).fetchone()
+    if row and now - float(row["window_start"]) <= window_seconds:
+        if int(row["count"]) >= limit:
+            retry_after = max(1, int(window_seconds - (now - float(row["window_start"]))))
+            raise HTTPException(
+                status_code=429,
+                detail="too many runs created; try again shortly",
+                headers={"Retry-After": str(retry_after)},
+            )
+        conn.execute("UPDATE rate_limits SET count=count+1 WHERE key=?", (key,))
+    else:
+        conn.execute(
+            """INSERT INTO rate_limits(key, window_start, count) VALUES (?, ?, 1)
+               ON CONFLICT(key) DO UPDATE SET window_start=excluded.window_start, count=1""",
+            (key, now),
         )
 
 
@@ -497,17 +897,23 @@ def actions_for(conn: sqlite3.Connection, run_id: str) -> list[sqlite3.Row]:
 
 
 def acquire_verifier_lease(conn: sqlite3.Connection) -> str:
+    """Mint a verifier token. Tokens are independent, so verifications can overlap."""
     token = new_id("VLEASE")
     conn.execute(
-        """INSERT INTO service_leases(service, token, updated_at) VALUES ('verifier', ?, ?)
-           ON CONFLICT(service) DO UPDATE SET token=excluded.token, updated_at=excluded.updated_at""",
-        (token, now_iso()),
+        "INSERT INTO verifier_tokens(token, created_at) VALUES (?, ?)", (token, now_iso())
+    )
+    # Housekeeping: a token is only needed for the duration of one write.
+    conn.execute(
+        "DELETE FROM verifier_tokens WHERE created_at < datetime('now', '-1 hour')"
     )
     return token
 
 
-def release_verifier_lease(conn: sqlite3.Connection) -> None:
-    conn.execute("DELETE FROM service_leases WHERE service='verifier'")
+def release_verifier_lease(conn: sqlite3.Connection, token: str | None = None) -> None:
+    if token is None:
+        conn.execute("DELETE FROM verifier_tokens")
+        return
+    conn.execute("DELETE FROM verifier_tokens WHERE token=?", (token,))
 
 
 def write_verification(conn: sqlite3.Connection, run_id: str, *, status: str, observed_reg_no: str | None,
@@ -525,7 +931,7 @@ def write_verification(conn: sqlite3.Connection, run_id: str, *, status: str, ob
              expected_reg_no, expected_deadline, int(matches_intent), now_iso(), token, note),
         )
     finally:
-        release_verifier_lease(conn)
+        release_verifier_lease(conn, token)
     return verification_id
 
 

@@ -45,8 +45,14 @@ if ENV == "production":
 
 DEMO_APPROVAL_SECRET = "rti-pilot-demo-secret-change-me"
 DEMO_ADMIN_TOKEN = "rti-demo-admin"
+DEMO_OPERATOR_TOKEN = "rti-demo-operator"
 PLACEHOLDER_SECRETS = frozenset(
-    {DEMO_APPROVAL_SECRET, DEMO_ADMIN_TOKEN, "replace-with-a-long-random-value"}
+    {
+        DEMO_APPROVAL_SECRET,
+        DEMO_ADMIN_TOKEN,
+        DEMO_OPERATOR_TOKEN,
+        "replace-with-a-long-random-value",
+    }
 )
 MIN_SECRET_LENGTH = 32
 
@@ -69,8 +75,13 @@ def _secret(name: str, demo_value: str) -> str:
 # it never reads the agent database.
 APPROVAL_SECRET = _secret("RTI_APPROVAL_SECRET", DEMO_APPROVAL_SECRET)
 ADMIN_TOKEN = _secret("RTI_ADMIN_TOKEN", DEMO_ADMIN_TOKEN)
-if ENV == "production" and APPROVAL_SECRET == ADMIN_TOKEN:
-    raise RuntimeError("RTI_APPROVAL_SECRET and RTI_ADMIN_TOKEN must differ")
+# Guards the agent's operator surface: approvals, review queue, test results and
+# the CAPTCHA handoff. Without it every mutating route is open to anyone with the URL.
+OPERATOR_TOKEN = _secret("RTI_OPERATOR_TOKEN", DEMO_OPERATOR_TOKEN)
+if ENV == "production" and len({APPROVAL_SECRET, ADMIN_TOKEN, OPERATOR_TOKEN}) != 3:
+    raise RuntimeError(
+        "RTI_APPROVAL_SECRET, RTI_ADMIN_TOKEN and RTI_OPERATOR_TOKEN must all differ"
+    )
 
 # auto | playwright | http
 FILING_MODE = os.getenv("RTI_FILING_MODE", "auto").lower()
@@ -83,6 +94,20 @@ ANTHROPIC_MODEL = os.getenv("ANTHROPIC_MODEL", "claude-sonnet-4-5-20250929")
 USE_LLM = os.getenv("RTI_USE_LLM", "0") == "1"
 
 ROUTING_CONFIDENCE_THRESHOLD = float(os.getenv("RTI_ROUTING_THRESHOLD", "0.70"))
+
+# Per-IP limit on creating runs, in requests per minute. A public demo otherwise
+# lets one client fill the database and the operator queue.
+RUN_RATE_LIMIT = int(os.getenv("RTI_RUN_RATE_LIMIT", "120"))
+
+# Background deadline worker: a thread inside the agent process by default because
+# the hosted deployment keeps SQLite on the instance (a separate worker would get a
+# different disk). `python -m agent.worker` runs the same loop standalone.
+WORKER_ENABLED = os.getenv("RTI_WORKER_ENABLED", "1") == "1"
+WORKER_INTERVAL_SECONDS = float(os.getenv("RTI_WORKER_INTERVAL_SECONDS", "30"))
+# How long a flagged request may wait for a human before the queue marks it overdue.
+REVIEW_SLA_HOURS = int(os.getenv("RTI_REVIEW_SLA_HOURS", "48"))
+# How often a filed request is re-checked against the portal.
+CHECK_INTERVAL_HOURS = float(os.getenv("RTI_CHECK_INTERVAL_HOURS", "6"))
 
 RULES_PATH = PROJECT_ROOT / "rules" / "rti_rules.json"
 STATIC_DIR = PROJECT_ROOT / "agent" / "static"

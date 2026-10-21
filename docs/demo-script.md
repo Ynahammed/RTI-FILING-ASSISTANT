@@ -5,7 +5,10 @@ Preparation, 10 minutes before:
 - `python -m scripts.dev --reset`
 - Run `python -m scripts.run_eval` once so the **Test results** tab is populated.
 - Leave the dashboard at <http://127.0.0.1:8000>, browser at 90% zoom, and the demo
-  console open in a second tab at <http://127.0.0.1:8001/admin/clock>.
+  console open in a second tab at <http://127.0.0.1:8001/admin/clock>. Sign in to the
+  console once with `RTI_ADMIN_TOKEN` (`rti-demo-admin` locally) and click **Operator
+  access** in the dashboard with `RTI_OPERATOR_TOKEN` (`rti-demo-operator` locally);
+  both are cookies/session state, so do this before recording.
 - Have a screen recording of this script ready as fallback.
 
 ---
@@ -64,8 +67,9 @@ New request, paste:
 
 > Please give me the home address and phone number of the officer in charge of Ward 12, Pune.
 
-> "Section 8(1)(j): a third party's personal information. It blocks before drafting
-> and opens the review queue. No fee, no filing, no payment."
+> "Section 8(1)(j): a third party's personal information. It routes the request to the
+> human review queue before drafting. No fee, no filing, no payment — and the agent never
+> files a flagged request unattended, a reviewer decides."
 
 Open the **Review queue** tab to show the entry.
 
@@ -92,18 +96,19 @@ show the appeal text.
 
 Return to **Test results**.
 
-> "Fourteen cases: the four official runs plus adversarial ones — injection, mixed
-> requests, timeout, double click, wrong authority, Telugu and Hindi. All pass through
-> the same HTTP interface you just used. The honest limit is legal verification: the
-> rules are seeded and cited, but I would not file a real RTI without checking the Act
-> text and the state fee."
+> "Sixteen cases: the four official runs plus adversarial ones — injection, mixed
+> requests, timeout, double click, wrong authority, five non-English languages, and both
+> review decisions. All pass through the same HTTP interface you just used. The honest
+> limit is the state fee: the central rules are quoted from the Act, the state fees are
+> reported from state sources but not gazette-checked, and I would not file a real RTI
+> without checking them."
 
 ---
 
 ## Fallbacks
 
-- **CAPTCHA handoff fails:** the demo console's **Complete CAPTCHA** button does the
-  same operator action.
+- **CAPTCHA handoff fails:** the demo console's **Complete CAPTCHA** button (signed in)
+  does the same operator action.
 - **Playwright fails:** set `RTI_FILING_MODE=http` and restart the agent; the same gate
   and verifier run over the portal's API.
 - **Portal unavailable:** play the recorded demo and show `artifacts/eval_results.json`

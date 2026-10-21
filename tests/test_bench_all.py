@@ -30,6 +30,19 @@ def healthy(**overrides):
         "retrieval_results.json": {
             "gate": {"precision_lift": 2.11, "authority_precision_lift": 4.15}
         },
+        "registry_coverage_results.json": {
+            "coverage": {"covered": 36, "jurisdictions": 36},
+            "gate": {"uncovered": 0, "missing_provenance": 0, "duplicate_codes": 0},
+        },
+        "rules_provenance_results.json": {
+            "provenance": {"uncited": 0},
+            "gate": {"uncited": 0, "unverified_claims": 0},
+        },
+        "review_routing_results.json": {
+            "chosen_threshold": 0.42,
+            "gate": {"recall": 0.3866, "precision": 0.3087, "review_load": 0.1375},
+            "nested": {"pooled_metrics": {"recall": 0.3782}},
+        },
         "operations_results.json": OPS_OK,
     }
     artifacts.update(overrides)
@@ -48,7 +61,7 @@ def test_all_gates_pass_with_healthy_artifacts(monkeypatch) -> None:
     artifacts = healthy()
     monkeypatch.setattr(bench_all, "read", lambda name: artifacts.get(name, {}))
     checks = bench_all.gates()
-    assert len(checks) == 11
+    assert len(checks) == 18
     assert all(item["passed"] for item in checks)
 
 

@@ -14,7 +14,7 @@ import threading
 from datetime import datetime
 from typing import Any
 
-from agent import agents, db, filing, messages, nlu, tracker, verifier
+from agent import agents, db, filing, messages, nlu, tracker, verifier, worker
 from common import config
 
 _locks: dict[str, threading.Lock] = {}
@@ -51,22 +51,32 @@ def _deadline_display(raw: str | None) -> str:
     return dt.strftime("%d %b %Y")
 
 
+def _match_state(answer: str) -> str | None:
+    text = nlu.normalise(answer)
+    for state, keywords in nlu.STATE_KEYWORDS.items():
+        if text == nlu.normalise(state) or any(word in text for word in keywords):
+            return state
+    return None
+
+
+def _match_department(answer: str) -> str | None:
+    text = nlu.normalise(answer)
+    for department, keywords in nlu.DEPARTMENT_KEYWORDS.items():
+        spelled = department.replace("_", " ")
+        if text in {department, spelled} or any(word in text for word, _ in keywords):
+            return department
+    return None
+
+
 def _normalise_answer(field: str, answer: str) -> str | None:
     """Map a free-text follow-up answer onto the value the field expects."""
     text = nlu.normalise(answer)
     if not text:
         return None
     if field == "state":
-        for state, keywords in nlu.STATE_KEYWORDS.items():
-            if text == nlu.normalise(state) or any(word in text for word in keywords):
-                return state
-        return None
+        return _match_state(answer)
     if field == "department":
-        for department, keywords in nlu.DEPARTMENT_KEYWORDS.items():
-            spelled = department.replace("_", " ")
-            if text in {department, spelled} or any(word in text for word, _ in keywords):
-                return department
-        return None
+        return _match_department(answer) or answer.strip()
     return answer.strip()
 
 
@@ -114,6 +124,24 @@ def _advance(run_id: str, answer: str | None = None) -> dict[str, Any]:
                     ).fetchone()
                     if candidate and reply.startswith(("yes", "y ", "confirm", "correct", "ok")):
                         db.add_field(conn, run_id, "authority_confirmed", candidate["value"], 0.95, "user")
+                    else:
+                        # A citizen who answers "Madhya Pradesh" instead of "yes" is
+                        # correcting the jurisdiction, not ignoring the question. Apply
+                        # the correction and route again rather than asking forever.
+                        corrected_state = _match_state(answer)
+                        corrected_department = (
+                            None if corrected_state else _match_department(answer)
+                        )
+                        if corrected_state or corrected_department:
+                            field = "state" if corrected_state else "department"
+                            value = corrected_state or corrected_department
+                            db.add_field(conn, run_id, field, value, 0.95, "user")
+                            parsed[field] = value
+                            conn.execute(
+                                "DELETE FROM fields WHERE run_id=? AND name='authority_candidate'",
+                                (run_id,),
+                            )
+                            db.set_run_fields(conn, run_id, pending_question=None)
                 elif pending == "intent" and answer:
                     # The uncertainty question asks records-or-action; the reply decides it.
                     reply = nlu.normalise(answer)
@@ -148,6 +176,9 @@ def _advance(run_id: str, answer: str | None = None) -> dict[str, Any]:
                 r["name"]: r["value"]
                 for r in conn.execute("SELECT name, value FROM fields WHERE run_id=?", (run_id,))
             }
+            # A reviewer who released this run lifted the flag. Without this, the
+            # deterministic screen would queue it again the moment it resumed.
+            released = str(fields.get("review_released", "")).lower() in {"true", "1"}
             for name in ("state", "department", "information_needed", "applicant_name"):
                 if fields.get(name):
                     parsed[name] = fields[name]
@@ -174,8 +205,15 @@ def _advance(run_id: str, answer: str | None = None) -> dict[str, Any]:
                     "decision_id": triage_row["decision_id"],
                 }
 
-            if triage_result["label"] == "exempt":
+            if triage_result["label"] == "exempt" and not released:
                 db.set_status(conn, run_id, "review_queue")
+                db.enqueue_review(
+                    conn, run_id,
+                    reason="The Section 8(1)(j) rule fired: the request appears to seek another "
+                           "person's private information.",
+                    source="rule",
+                    sla_hours=getattr(config, "REVIEW_SLA_HOURS", 48),
+                )
                 _message_once(conn, run_id, messages.t("exempt", run["language"]))
                 return db.run_detail(conn, run_id)
 
@@ -202,6 +240,25 @@ def _advance(run_id: str, answer: str | None = None) -> dict[str, Any]:
                     conn, run_id,
                     messages.t("mixed", run["language"], grievance_url=agents.GRIEVANCE_URL),
                 )
+
+            # Review routing applies only where a filing would otherwise happen. A
+            # grievance is redirected and a blocked exemption is already queued, so
+            # queueing those again would add review work with no filing to prevent.
+            review = triage_result.get("review_required")
+            if review and triage_result["label"] in {"rti", "mixed"} and not released:
+                db.set_status(conn, run_id, "review_queue")
+                db.enqueue_review(
+                    conn, run_id,
+                    reason=(
+                        "The 8(1)(j) classifier scored this request at or above the review "
+                        f"threshold ({review.get('score', 0):.3f} >= {review.get('threshold', 0):.2f})."
+                    ),
+                    source="classifier",
+                    score=review.get("score"),
+                    sla_hours=getattr(config, "REVIEW_SLA_HOURS", 48),
+                )
+                _message_once(conn, run_id, messages.t("review", run["language"]))
+                return db.run_detail(conn, run_id)
 
             # 3. Urgency -----------------------------------------------------
             if _latest(conn, run_id, "urgency") is None:
@@ -308,17 +365,25 @@ def _advance(run_id: str, answer: str | None = None) -> dict[str, Any]:
 # --------------------------------------------------------------------- public
 
 
-def start_run(text: str, language: str | None = None, overrides: dict[str, Any] | None = None) -> str:
+def start_run(
+    text: str, language: str | None = None, overrides: dict[str, Any] | None = None
+) -> tuple[str, str]:
+    """Create a run and return ``(run_id, run_token)``.
+
+    The token is the client's scoped credential for every later call about this
+    run, so it is minted before the response and never stored in plaintext.
+    """
     conn = db.connect()
     try:
         db.init_db(conn)
         lang = nlu.detect_language(text, language)
         run_id = db.create_run(conn, language=lang, raw_input=text, overrides=overrides)
         db.add_message(conn, run_id, "user", text)
+        run_token = db.issue_run_token(conn, run_id)
     finally:
         conn.close()
     _advance(run_id)
-    return run_id
+    return run_id, run_token
 
 
 def answer(run_id: str, text: str) -> dict[str, Any]:
@@ -403,7 +468,23 @@ def complete_captcha(run_id: str) -> dict[str, Any]:
                 _message_once(conn, run_id, messages.t("uncertain", run["language"], missing="a successful payment"))
                 return db.run_detail(conn, run_id)
 
-            verification = verifier.verify(conn, run_id)
+            # A filed request now has a durable follow-up: the worker re-checks it
+            # on a schedule instead of waiting for someone to press "Check now".
+            worker.enqueue_check(conn, run_id)
+
+            try:
+                verification = verifier.verify(conn, run_id)
+            except Exception as exc:
+                # Payment succeeded, so the run must not sit at `filed` as if the
+                # verification had happened. Record the failure and show it.
+                db.add_decision(
+                    conn, run_id, "verifier", "error", 0.4,
+                    f"The verifier could not finish: {type(exc).__name__}: {exc}. "
+                    "Recorded as unverified rather than assumed successful.",
+                    "7(1)", {"error": str(exc)[:300]},
+                )
+                db.set_status(conn, run_id, "filed_unverified")
+                verification = {"status": "pending", "note": str(exc)}
             if verification.get("status") == "verified":
                 _message_once(
                     conn, run_id,
@@ -440,6 +521,62 @@ def decline(run_id: str, reason: str = "") -> dict[str, Any]:
             return db.run_detail(conn, run_id)
         finally:
             conn.close()
+
+
+def resume_review(
+    run_id: str,
+    decision: str,
+    operator: dict[str, Any],
+    note: str = "",
+) -> dict[str, Any]:
+    """Close a human review: uphold the exemption, or release the run to filing.
+
+    Releasing is not a silent override. It records who decided, why, and a field
+    the pipeline reads so the same rule cannot queue the run again.
+    """
+    with _lock(run_id):
+        conn = db.connect()
+        try:
+            run = db.get_run(conn, run_id)
+            if run["status"] != "review_queue":
+                raise ValueError("this run is not waiting for review")
+            review = db.decide_review(conn, run_id, operator, decision, note)
+            name = operator.get("name") or "operator"
+            if decision == "uphold":
+                db.add_decision(
+                    conn, run_id, "review", "exemption_upheld", 1.0,
+                    f"Reviewer {name} confirmed the Section 8(1)(j) exemption, so the run is "
+                    f"closed. {note.strip() or 'No note was added.'}",
+                    "8(1)(j)",
+                    {"review_id": review["review_id"], "decided_by": name},
+                )
+                db.add_evidence(
+                    conn, run_id, source_id="REVIEW-DECISION", source_url="",
+                    extracted_value=f"Exemption upheld by {name}: {note.strip() or 'no note'}",
+                    source="operator", kind="review",
+                )
+                db.set_status(conn, run_id, "closed")
+                _message_once(conn, run_id, messages.t("exempt", run["language"]))
+                return db.run_detail(conn, run_id)
+
+            db.add_decision(
+                conn, run_id, "review", "released_for_filing", 1.0,
+                f"Reviewer {name} released the request for filing. Reason on record: "
+                f"{note.strip()}",
+                "8(1)(j)",
+                {"review_id": review["review_id"], "decided_by": name},
+            )
+            db.add_evidence(
+                conn, run_id, source_id="REVIEW-DECISION", source_url="",
+                extracted_value=f"Released by {name}: {note.strip()}",
+                source="operator", kind="review",
+            )
+            db.add_field(conn, run_id, "review_released", "true", 0.99, "operator")
+            db.set_status(conn, run_id, "intake")
+        finally:
+            conn.close()
+    # _advance takes the same per-run lock, so it runs after it is released.
+    return _advance(run_id)
 
 
 def track(run_id: str) -> dict[str, Any]:

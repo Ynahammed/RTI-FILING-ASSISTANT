@@ -15,7 +15,8 @@ Conventions
 from __future__ import annotations
 
 import math
-from typing import Iterable, Sequence
+import random
+from typing import Any, Callable, Iterable, Sequence
 
 
 def prf(tp: int, fp: int, fn: int) -> dict[str, float | int]:
@@ -190,6 +191,66 @@ def expected_calibration_error(
     return round(total, 4)
 
 
+def cohen_kappa(labels_a: Sequence[bool], labels_b: Sequence[bool]) -> float:
+    """Chance-corrected agreement between two annotators on binary labels.
+
+    Kappa near 1 means the two annotators agree far beyond chance; near 0 means
+    they are no better than independent coin flips with the same marginals.
+    """
+    n = min(len(labels_a), len(labels_b))
+    if n == 0:
+        return 0.0
+    a = [bool(v) for v in labels_a[:n]]
+    b = [bool(v) for v in labels_b[:n]]
+    observed = sum(x == y for x, y in zip(a, b)) / n
+    p_a = sum(a) / n
+    p_b = sum(b) / n
+    expected = p_a * p_b + (1 - p_a) * (1 - p_b)
+    if expected >= 1.0:
+        return 1.0
+    return round((observed - expected) / (1 - expected), 4)
+
+
 def mean(values: Sequence[float]) -> float:
     """Arithmetic mean rounded to 4 places, 0.0 for an empty sequence."""
     return round(sum(float(v) for v in values) / len(values), 4) if values else 0.0
+
+
+def wilson_interval(successes: int, n: int, z: float = 1.96) -> tuple[float, float]:
+    """Wilson score interval for a proportion.
+
+    Used instead of the normal approximation because small studies and proportions
+    near 0 or 1 are exactly where the normal interval misleads.
+    """
+    if n <= 0:
+        return (0.0, 0.0)
+    p = successes / n
+    denominator = 1 + z * z / n
+    centre = (p + z * z / (2 * n)) / denominator
+    margin = z * math.sqrt(p * (1 - p) / n + z * z / (4 * n * n)) / denominator
+    return (round(max(0.0, centre - margin), 4), round(min(1.0, centre + margin), 4))
+
+
+def bootstrap_interval(
+    values: Sequence[Any],
+    statistic: Callable[[Sequence[Any]], float],
+    iterations: int = 2000,
+    seed: int = 0,
+) -> tuple[float, float]:
+    """Percentile bootstrap interval for a statistic over rows.
+
+    Deterministic for a given seed, so a reported interval can be reproduced.
+    Resampling rows (not labels) keeps paired structure, which matters for kappa.
+    """
+    n = len(values)
+    if n < 2 or iterations < 100:
+        return (0.0, 0.0)
+    rng = random.Random(seed)
+    draws: list[float] = []
+    for _ in range(iterations):
+        sample = [values[rng.randrange(n)] for _ in range(n)]
+        draws.append(float(statistic(sample)))
+    draws.sort()
+    low = draws[max(0, int(0.025 * iterations) - 1)]
+    high = draws[min(iterations - 1, int(0.975 * iterations))]
+    return (round(low, 4), round(high, 4))

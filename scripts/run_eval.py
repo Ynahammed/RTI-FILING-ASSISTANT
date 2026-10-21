@@ -25,8 +25,12 @@ import httpx
 AGENT = os.getenv("RTI_AGENT_URL", "http://127.0.0.1:8000").rstrip("/")
 PORTAL = os.getenv("RTI_PORTAL_URL", "http://127.0.0.1:8001").rstrip("/")
 ADMIN = os.getenv("RTI_ADMIN_TOKEN", "rti-demo-admin")
+# The harness drives the operator surface (review queue, stored test results), so
+# it presents the operator token. Set RTI_OPERATOR_TOKEN to evaluate a deployment
+# that uses a real secret.
+OPERATOR = os.getenv("RTI_OPERATOR_TOKEN", "rti-demo-operator")
 
-CLIENT = httpx.Client(timeout=180)
+CLIENT = httpx.Client(timeout=180, headers={"X-Operator-Token": OPERATOR})
 
 TC1_TEXT = (
     "How much did the Public Works Department spend on repairing the road outside my house "
@@ -49,9 +53,13 @@ X5_TEXT = (
 X6_TEXT = "Why did the officer approve the road repair contract without a tender in Pune?"
 X7_TEXT = TC1_TEXT
 X8_TEXT = TC1_TEXT
+X9_LANGUAGES = {"te", "hi", "mr", "kn", "ta"}
 X9_INPUTS = [
     ("te", "పూణేలోని 12వ వార్డులో రోడ్డు మరమ్మతులకు గత సంవత్సరం ఎంత ఖర్చు చేశారో తెలియజేయండి."),
     ("hi", "पुणे के वार्ड 12 में सड़क मरम्मत पर पिछले साल कितना खर्च हुआ, यह बताइए।"),
+    ("mr", "पुण्यातील 12 व्या वार्डातील रस्ता दुरुस्तीवर गेल्या वर्षी किती खर्च झाला, ते माहिती द्या."),
+    ("kn", "ಪುಣೆಯ 12ನೇ ವಾರ್ಡ್‌ನಲ್ಲಿ ರಸ್ತೆ ದುರಸ್ತಿಗೆ ಕಳೆದ ವರ್ಷ ಎಷ್ಟು ಖರ್ಚು ಆಯಿತು ಎಂದು ಮಾಹಿತಿ ನೀಡಿ."),
+    ("ta", "புனே 12வது வார்டில் சாலை பழுதுபார்ப்புக்கு கடந்த ஆண்டு எவ்வளவு செலவு செய்யப்பட்டது என்று தகவல் தாருங்கள்."),
 ]
 X10_TEXT = TC1_TEXT
 
@@ -119,6 +127,18 @@ def execute(case: dict[str, Any]) -> tuple[list[dict[str, Any]], dict[str, Any],
             detail = post_agent("/api/runs", {"text": text, "language": language})
             details.append(detail)
         return details, extra, " / ".join(d["run"]["language"] for d in details)
+
+    if case.get("review_decision"):
+        detail = post_agent("/api/runs", {"text": case["text"]})
+        run_id = detail["run"]["run_id"]
+        if detail["run"]["status"] != "review_queue":
+            raise RuntimeError(f"expected a review flag, got {detail['run']['status']}")
+        extra["claim"] = post_agent(f"/api/reviews/{run_id}/claim", {})
+        decided = post_agent(
+            f"/api/reviews/{run_id}/decide",
+            {"decision": case["review_decision"], "note": "Evaluation run: ownership and audit check."},
+        )
+        return [decided], extra, run_id
 
     if case.get("timeout"):
         portal_admin("/admin/simulate", {"timeout_next_filing": "1", "skew_next_deadline_days": "0"})
@@ -322,7 +342,7 @@ def check_x9(details: list[dict[str, Any]], extra: dict[str, Any]) -> tuple[bool
     for d in details:
         lang = d["run"]["language"]
         routing = decision(d, "routing")
-        checks[f"{lang} language detected"] = lang in {"te", "hi"}
+        checks[f"{lang} language detected"] = lang in X9_LANGUAGES
         checks[f"{lang} RTI"] = decision(d, "triage").get("label") == "rti"
         checks[f"{lang} routed to MH-PWD-01"] = (routing.get("output") or {}).get("authority") == "MH-PWD-01"
         checks[f"{lang} same fields"] = (
@@ -351,6 +371,58 @@ def check_x10(details: list[dict[str, Any]], extra: dict[str, Any]) -> tuple[boo
         "waiting for approval": (d.get("approval") or {}).get("status") == "pending",
     }
     return all(checks.values()), actual_summary(d) + f"; reply_state={tracker.get('reply_state')}; " + "; ".join(f"{k}={v}" for k, v in checks.items()), ""
+
+
+def _review_checks(details: list[dict[str, Any]], extra: dict[str, Any]) -> tuple[dict[str, bool], dict[str, Any]]:
+    d = details[0]
+    review = (extra.get("claim") or {}).get("review") or {}
+    operator = (extra.get("claim") or {}).get("review", {}).get("assigned_to")
+    decisions = [x for x in d["decisions"] if x["agent"] == "review"]
+    audit = CLIENT.get(f"{AGENT}/api/audit", params={"limit": 50}).json()
+    mine = [row for row in audit if row.get("run_id") == d["run"]["run_id"]]
+    checks = {
+        "queue row exists": bool(review),
+        "claim recorded": bool(review.get("assigned_to")),
+        "decision attributed": all(x.get("output", {}).get("decided_by") == operator for x in decisions),
+        "audit names the operator": {row["action"] for row in mine} >= {"review.claim"},
+    }
+    return checks, {"operator": operator, "audit": sorted({row["action"] for row in mine})}
+
+
+def check_x11(details: list[dict[str, Any]], extra: dict[str, Any]) -> tuple[bool, str, str]:
+    d = details[0]
+    checks, info = _review_checks(details, extra)
+    checks.update({
+        "exemption upheld": any(x["label"] == "exemption_upheld" for x in d["decisions"] if x["agent"] == "review"),
+        "run closed": d["run"]["status"] == "closed",
+        "nothing filed": not d["actions"],
+        "no fee charged": "fee_inr" not in d["fields"],
+    })
+    return (
+        all(checks.values()),
+        actual_summary(d) + f"; operator={info['operator']}; audit={info['audit']}; "
+        + "; ".join(f"{k}={v}" for k, v in checks.items()),
+        "",
+    )
+
+
+def check_x12(details: list[dict[str, Any]], extra: dict[str, Any]) -> tuple[bool, str, str]:
+    d = details[0]
+    checks, info = _review_checks(details, extra)
+    decision = next((x for x in d["decisions"] if x["agent"] == "review"), {})
+    checks.update({
+        "released for filing": decision.get("label") == "released_for_filing",
+        "reason on record": "ownership and audit check" in decision.get("reason", ""),
+        "left the queue": d["run"]["status"] != "review_queue",
+        "reached approval": d["run"]["status"] == "awaiting_approval",
+        "release flag stored": (d["fields"].get("review_released") or {}).get("value") == "true",
+    })
+    return (
+        all(checks.values()),
+        actual_summary(d) + f"; operator={info['operator']}; audit={info['audit']}; "
+        + "; ".join(f"{k}={v}" for k, v in checks.items()),
+        "",
+    )
 
 
 CASES = [
@@ -382,11 +454,17 @@ CASES = [
     flow("X8", "Wrong authority", X8_TEXT,
          "Mock Section 6(3) transfer; tracker follows it", check_x8,
          approve=True, captcha=True, track=True, overrides={"authority_code": "MH-HOME-01"}),
-    flow("X9", "Telugu and Hindi intake", "Telugu and Hindi equivalents of TC1",
+    flow("X9", "Five non-English languages", "Telugu, Hindi, Marathi, Kannada and Tamil equivalents of TC1",
          "Same language-appropriate result as the English request: RTI, PWD, Maharashtra", check_x9, x9=True),
     flow("X10", "Deadline passes with no reply", X10_TEXT,
          "Section 19 first-appeal draft produced for approval", check_x10,
          approve=True, captcha=True, advance_days=31, track=True),
+    flow("X11", "Review upheld by a named operator", TC3_TEXT,
+         "Flag claimed, exemption upheld, run closed, nothing filed, decision audited",
+         check_x11, review_decision="uphold"),
+    flow("X12", "Review released to filing", TC3_TEXT,
+         "Flag claimed, release recorded with a reason, run continues to the approval card",
+         check_x12, review_decision="release"),
 ]
 
 

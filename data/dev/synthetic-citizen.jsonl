@@ -1,0 +1,100 @@
+{"id": "SYN-001", "text": "Please give me the home address and phone number of the ward officer in charge of Ward 12, Pune.", "personal_data": true, "topic": "officer contact", "synthetic": true}
+{"id": "SYN-002", "text": "I want the residential address of the PIO who rejected my application last month.", "personal_data": true, "topic": "officer contact", "synthetic": true}
+{"id": "SYN-003", "text": "Kindly provide the personal mobile number of the municipal commissioner of Nagpur.", "personal_data": true, "topic": "officer contact", "synthetic": true}
+{"id": "SYN-004", "text": "Where does the inspector who signed the demolition notice live? I need his house address.", "personal_data": true, "topic": "officer contact", "synthetic": true}
+{"id": "SYN-005", "text": "Please share the home address of Dr. Kulkarni and the timings of his private clinic.", "personal_data": true, "topic": "officer contact", "synthetic": true}
+{"id": "SYN-006", "text": "I need the complete medical records and discharge summary of patient Ramesh Patil admitted in the civil hospital.", "personal_data": true, "topic": "medical", "synthetic": true}
+{"id": "SYN-007", "text": "Give me the blood test and X-ray reports of a named person treated at the district hospital in March.", "personal_data": true, "topic": "medical", "synthetic": true}
+{"id": "SYN-008", "text": "Please provide the psychiatric evaluation records of an individual admitted to the government mental health centre.", "personal_data": true, "topic": "medical", "synthetic": true}
+{"id": "SYN-009", "text": "I want the names and HIV status of all patients who visited the ART centre in the last six months.", "personal_data": true, "topic": "medical", "synthetic": true}
+{"id": "SYN-010", "text": "Please give the ward-wise list of patients with their diagnoses and treating doctor names.", "personal_data": true, "topic": "medical", "synthetic": true}
+{"id": "SYN-011", "text": "I need the salary slip and deductions of a named clerk working in the collector's office.", "personal_data": true, "topic": "employment", "synthetic": true}
+{"id": "SYN-012", "text": "Provide the bank account number and IFSC of the contractor who built the ward road.", "personal_data": true, "topic": "financial", "synthetic": true}
+{"id": "SYN-013", "text": "Please share the income tax returns filed by a particular businessman in Pune for 2023-24.", "personal_data": true, "topic": "financial", "synthetic": true}
+{"id": "SYN-014", "text": "I want the loan amount and repayment record of a named farmer from the district cooperative bank.", "personal_data": true, "topic": "financial", "synthetic": true}
+{"id": "SYN-015", "text": "Please give me the property details and ownership documents of a named private individual in Kothrud.", "personal_data": true, "topic": "property", "synthetic": true}
+{"id": "SYN-016", "text": "I need the family details, spouse name and children's schools of a named government teacher.", "personal_data": true, "topic": "family", "synthetic": true}
+{"id": "SYN-017", "text": "Provide a copy of the caste certificate submitted by a named applicant for the scholarship.", "personal_data": true, "topic": "identity", "synthetic": true}
+{"id": "SYN-018", "text": "Please share the Aadhaar card copy of a named beneficiary under the housing scheme.", "personal_data": true, "topic": "identity", "synthetic": true}
+{"id": "SYN-019", "text": "I want the passport details and travel history of a named person who works in the municipal office.", "personal_data": true, "topic": "identity", "synthetic": true}
+{"id": "SYN-020", "text": "Give me the list of beneficiaries with their Aadhaar numbers and bank accounts under the scheme.", "personal_data": true, "topic": "identity", "synthetic": true}
+{"id": "SYN-021", "text": "Please provide the school records and report card of a named child studying in the municipal school.", "personal_data": true, "topic": "education", "synthetic": true}
+{"id": "SYN-022", "text": "I need the call detail records of a named employee's official phone for last month.", "personal_data": true, "topic": "surveillance", "synthetic": true}
+{"id": "SYN-023", "text": "Please give me the CCTV footage from the ward office on 12 May that shows a named visitor.", "personal_data": true, "topic": "surveillance", "synthetic": true}
+{"id": "SYN-024", "text": "I want the names of the informants who complained against the shop in my area.", "personal_data": true, "topic": "informants", "synthetic": true}
+{"id": "SYN-025", "text": "Provide the WhatsApp chat between a named officer and the contractor regarding the tender.", "personal_data": true, "topic": "communications", "synthetic": true}
+{"id": "SYN-026", "text": "I need the medical fitness report of a named candidate selected for the constable post.", "personal_data": true, "topic": "medical", "synthetic": true}
+{"id": "SYN-027", "text": "Please share the disability certificate details of a named person receiving the pension.", "personal_data": true, "topic": "identity", "synthetic": true}
+{"id": "SYN-028", "text": "Give me the marital status and family particulars of a named employee from the personnel file.", "personal_data": true, "topic": "family", "synthetic": true}
+{"id": "SYN-029", "text": "I want the address and contact number of the woman who filed the harassment complaint against the supervisor.", "personal_data": true, "topic": "safety", "synthetic": true}
+{"id": "SYN-030", "text": "Please provide the list of residents in my society with their phone numbers and flat numbers.", "personal_data": true, "topic": "contact list", "synthetic": true}
+{"id": "SYN-031", "text": "I need the biometric attendance details of named employees of the ward office.", "personal_data": true, "topic": "employment", "synthetic": true}
+{"id": "SYN-032", "text": "Please give the fee defaulters list with student names and pending amounts for the municipal school.", "personal_data": true, "topic": "education", "synthetic": true}
+{"id": "SYN-033", "text": "Provide the list of loan defaulters with their names, addresses and outstanding amounts.", "personal_data": true, "topic": "financial", "synthetic": true}
+{"id": "SYN-034", "text": "I want the names of all patients admitted to the de-addiction centre in the district hospital.", "personal_data": true, "topic": "medical", "synthetic": true}
+{"id": "SYN-035", "text": "Please share the photograph and residential address of the tenant who rented the municipal shop.", "personal_data": true, "topic": "identity", "synthetic": true}
+{"id": "SYN-036", "text": "How much did the Public Works Department spend on repairing the road in Ward 12, Pune, during 2025-26?", "personal_data": false, "topic": "spending", "synthetic": true}
+{"id": "SYN-037", "text": "पुण्यातील वार्ड 12 मधील रस्ता दुरुस्तीवर गेल्या वर्षी किती खर्च झाला, ते माहिती द्या.", "personal_data": false, "topic": "spending", "synthetic": true}
+{"id": "SYN-038", "text": "Please provide the work orders and measurement books for the pothole repairs in my ward.", "personal_data": false, "topic": "records", "synthetic": true}
+{"id": "SYN-039", "text": "I want the names of the companies that bid for the road contract and the amount each quoted.", "personal_data": false, "topic": "procurement", "synthetic": true}
+{"id": "SYN-040", "text": "Give me the measurement books and inspection notes for the road work completed in June.", "personal_data": false, "topic": "records", "synthetic": true}
+{"id": "SYN-041", "text": "How many streetlights were installed in the ward last year and what was the maintenance contract value?", "personal_data": false, "topic": "spending", "synthetic": true}
+{"id": "SYN-042", "text": "Please provide the water supply schedule and the tanker log for my area for last month.", "personal_data": false, "topic": "services", "synthetic": true}
+{"id": "SYN-043", "text": "I need the garbage collection route, vehicle numbers and the monthly expense for each ward.", "personal_data": false, "topic": "services", "synthetic": true}
+{"id": "SYN-044", "text": "How much was spent on cleaning the drains in the city before the monsoon this year?", "personal_data": false, "topic": "spending", "synthetic": true}
+{"id": "SYN-045", "text": "Please give the number of sanctioned sanitation posts, the number filled and the number vacant.", "personal_data": false, "topic": "staffing", "synthetic": true}
+{"id": "SYN-046", "text": "What percentage of the office staff attended work in the last quarter, as per the attendance summary?", "personal_data": false, "topic": "staffing", "synthetic": true}
+{"id": "SYN-047", "text": "Provide the minutes of the ward committee meetings held in the last six months.", "personal_data": false, "topic": "records", "synthetic": true}
+{"id": "SYN-048", "text": "I want the inspection report of the municipal school kitchen and the action taken on it.", "personal_data": false, "topic": "inspection", "synthetic": true}
+{"id": "SYN-049", "text": "Please share the file notings on the building permission application for the plot in my area.", "personal_data": false, "topic": "records", "synthetic": true}
+{"id": "SYN-050", "text": "Give me the list of building permissions granted in the ward this year with the fees collected.", "personal_data": false, "topic": "records", "synthetic": true}
+{"id": "SYN-051", "text": "What is the policy for granting hawker licences and how many were issued last year?", "personal_data": false, "topic": "policy", "synthetic": true}
+{"id": "SYN-052", "text": "How many RTI applications did the department receive and dispose of in 2025-26?", "personal_data": false, "topic": "policy", "synthetic": true}
+{"id": "SYN-053", "text": "What are the reasons recorded for the delay in issuing birth certificates in the ward office?", "personal_data": false, "topic": "policy", "synthetic": true}
+{"id": "SYN-054", "text": "Please provide copies of the circulars issued on property tax assessment in the last two years.", "personal_data": false, "topic": "policy", "synthetic": true}
+{"id": "SYN-055", "text": "I want the ward-wise property tax collection figures for 2025-26.", "personal_data": false, "topic": "spending", "synthetic": true}
+{"id": "SYN-056", "text": "Who approved the road repair contract and what was their designation at the time?", "personal_data": false, "topic": "accountability", "synthetic": true}
+{"id": "SYN-057", "text": "What are the duties and designation of the PIO for the Public Works Department?", "personal_data": false, "topic": "officer role", "synthetic": true}
+{"id": "SYN-058", "text": "Please give me the official landline number of the ward office and its working hours.", "personal_data": false, "topic": "office", "synthetic": true}
+{"id": "SYN-059", "text": "What is the pay scale for the post of junior engineer in the department?", "personal_data": false, "topic": "staffing", "synthetic": true}
+{"id": "SYN-060", "text": "How many teachers and students are there in each municipal school in the ward?", "personal_data": false, "topic": "education", "synthetic": true}
+{"id": "SYN-061", "text": "Please share the school-wise pass percentage for the Class 10 board examination last year.", "personal_data": false, "topic": "education", "synthetic": true}
+{"id": "SYN-062", "text": "I want the mid-day meal menu and the supplier agreement for the school in my area.", "personal_data": false, "topic": "education", "synthetic": true}
+{"id": "SYN-063", "text": "How many books were purchased for the municipal library last year and at what cost?", "personal_data": false, "topic": "spending", "synthetic": true}
+{"id": "SYN-064", "text": "Provide the medicine purchase records and stock register of the civil hospital for 2025-26.", "personal_data": false, "topic": "procurement", "synthetic": true}
+{"id": "SYN-065", "text": "What is the bed occupancy and the number of doctors on duty in the district hospital?", "personal_data": false, "topic": "services", "synthetic": true}
+{"id": "SYN-066", "text": "I need the average ambulance response time in each block last quarter.", "personal_data": false, "topic": "services", "synthetic": true}
+{"id": "SYN-067", "text": "How many doctors were on duty in the emergency ward during the festival week?", "personal_data": false, "topic": "staffing", "synthetic": true}
+{"id": "SYN-068", "text": "Provide the vaccine stock, wastage figures and cold chain logs for the district.", "personal_data": false, "topic": "services", "synthetic": true}
+{"id": "SYN-069", "text": "How many births and deaths were registered in the ward office in 2025?", "personal_data": false, "topic": "records", "synthetic": true}
+{"id": "SYN-070", "text": "Please give the number of pension applications pending and the average time taken to dispose of them.", "personal_data": false, "topic": "services", "synthetic": true}
+{"id": "SYN-071", "text": "What quantity of ration was allocated to each shop and how much was distributed?", "personal_data": false, "topic": "services", "synthetic": true}
+{"id": "SYN-072", "text": "I want the list of ration shops in the taluka with their licence numbers and owners' business names.", "personal_data": false, "topic": "procurement", "synthetic": true}
+{"id": "SYN-073", "text": "How many BPL cards were issued in the ward last year and how many were cancelled?", "personal_data": false, "topic": "services", "synthetic": true}
+{"id": "SYN-074", "text": "Provide the crime statistics for the police station by category for the last three years.", "personal_data": false, "topic": "statistics", "synthetic": true}
+{"id": "SYN-075", "text": "How many complaints were received against contractors in the department and what action was taken?", "personal_data": false, "topic": "accountability", "synthetic": true}
+{"id": "SYN-076", "text": "Please share the police patrolling schedule for the night shift in my area.", "personal_data": false, "topic": "operations", "synthetic": true}
+{"id": "SYN-077", "text": "How many cases are pending in the district court and what is the average disposal time?", "personal_data": false, "topic": "statistics", "synthetic": true}
+{"id": "SYN-078", "text": "Give me the land acquisition notification and the award amounts paid for the project.", "personal_data": false, "topic": "land", "synthetic": true}
+{"id": "SYN-079", "text": "Please provide the survey numbers and area of government land in the village.", "personal_data": false, "topic": "land", "synthetic": true}
+{"id": "SYN-080", "text": "How many encroachments were removed in the ward this year and on which dates?", "personal_data": false, "topic": "land", "synthetic": true}
+{"id": "SYN-081", "text": "I want the number of trees cut for the road widening project and the permission letters issued.", "personal_data": false, "topic": "environment", "synthetic": true}
+{"id": "SYN-082", "text": "Provide the air and water pollution readings for the industrial area for the last six months.", "personal_data": false, "topic": "environment", "synthetic": true}
+{"id": "SYN-083", "text": "Please share the factory inspection reports for the chemical plant in the industrial estate.", "personal_data": false, "topic": "inspection", "synthetic": true}
+{"id": "SYN-084", "text": "I want the balance sheet and profit and loss statement of the company that runs the toll plaza.", "personal_data": false, "topic": "company", "synthetic": true}
+{"id": "SYN-085", "text": "Provide the tender documents and evaluation matrix for the solid waste contract.", "personal_data": false, "topic": "procurement", "synthetic": true}
+{"id": "SYN-086", "text": "Please give the list of bidders and their quoted amounts for the water pipeline tender.", "personal_data": false, "topic": "procurement", "synthetic": true}
+{"id": "SYN-087", "text": "I need copies of the agreements signed with the contractor for the garden maintenance.", "personal_data": false, "topic": "procurement", "synthetic": true}
+{"id": "SYN-088", "text": "Give me the details of the public private partnership for the bus shelter project.", "personal_data": false, "topic": "procurement", "synthetic": true}
+{"id": "SYN-089", "text": "What was the cost of the flyover and how much was the cost escalation approved?", "personal_data": false, "topic": "spending", "synthetic": true}
+{"id": "SYN-090", "text": "Please provide the reasons recorded for the delay in completing the flyover project.", "personal_data": false, "topic": "accountability", "synthetic": true}
+{"id": "SYN-091", "text": "How many complaints were received about the road in my ward and what action was taken on each?", "personal_data": false, "topic": "services", "synthetic": true}
+{"id": "SYN-092", "text": "What are the timelines for grievance redressal in the municipal corporation and how many are pending?", "personal_data": false, "topic": "policy", "synthetic": true}
+{"id": "SYN-093", "text": "What is the status of my application number MH-2025-44821 for a birth certificate?", "personal_data": false, "topic": "own record", "synthetic": true}
+{"id": "SYN-094", "text": "Please give me a copy of my own medical records from the district hospital.", "personal_data": false, "topic": "own record", "synthetic": true}
+{"id": "SYN-095", "text": "I need my own salary slip and Form 16 from the department for the last financial year.", "personal_data": false, "topic": "own record", "synthetic": true}
+{"id": "SYN-096", "text": "Provide a copy of my property tax receipt and the assessment details for my flat.", "personal_data": false, "topic": "own record", "synthetic": true}
+{"id": "SYN-097", "text": "Give me a copy of the complaint I filed about the garbage dump last month.", "personal_data": false, "topic": "own record", "synthetic": true}
+{"id": "SYN-098", "text": "I want a copy of my answer sheet for the departmental examination held in March.", "personal_data": false, "topic": "own record", "synthetic": true}
+{"id": "SYN-099", "text": "The street light near my house has been broken for three weeks. Please fix it immediately.", "personal_data": false, "topic": "grievance", "synthetic": true}
+{"id": "SYN-100", "text": "Garbage has not been collected in our lane for a week and it is smelling. Please take action.", "personal_data": false, "topic": "grievance", "synthetic": true}

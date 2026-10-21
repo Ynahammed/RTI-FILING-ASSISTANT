@@ -13,6 +13,12 @@ from agent import db  # noqa: E402
 from common import config  # noqa: E402
 
 
+@pytest.fixture(autouse=True)
+def _no_background_worker(monkeypatch):
+    """Tests drive the worker explicitly; a live timer would race them."""
+    monkeypatch.setattr(config, "WORKER_ENABLED", False)
+
+
 @pytest.fixture()
 def conn(tmp_path, monkeypatch):
     monkeypatch.setattr(config, "AGENT_DB", tmp_path / "agent-test.db")

@@ -3,8 +3,14 @@ __pycache__/
 .pytest_cache/
 .venv/
 venv/
-data/
+# Datasets are downloaded, not versioned. The small development fixtures are
+# the exception: the tests and the docs read them, so a fresh clone needs them.
+data/*
+!data/dev/
+data/dev/*
+!data/dev/*.jsonl
 artifacts/
+.freebuff/
 *.db
 *.db-wal
 *.db-shm

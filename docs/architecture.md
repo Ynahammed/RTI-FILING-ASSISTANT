@@ -8,15 +8,17 @@ Two independently running services with separate SQLite databases:
 | Mock portal | 8001 | `data/portal.db` | application form, CAPTCHA handoff, payment, acknowledgement, transfer, grievance, demo clock |
 
 The verifier reads the portal's confirmation page. It never trusts the filing
-response, and it never writes to the portal database. The only shared secret is the
-HMAC key used to sign approval tokens.
+response, and it never writes to the portal database. The services share the HMAC key
+that signs approval tokens, plus the portal admin token the agent uses to complete the
+demo CAPTCHA handoff; the agent's operator token is its own and the portal never sees
+it.
 
 ```mermaid
 flowchart LR
-  Citizen[Citizen text<br/>EN / TE / HI] --> Intake
-  Intake --> Triage[Triage + Section 8 screen]
+  Citizen[Citizen text<br/>EN / TE / HI / MR / KN / TA] --> Intake
+  Intake --> Triage[Triage + Section 8 review router]
   Triage -->|grievance| Grievance[Grievance redirect<br/>no filing]
-  Triage -->|exempt| Review[Review queue<br/>no filing]
+  Triage -->|8(1)(j) flag| Review[Review queue<br/>human decides<br/>no unattended filing]
   Triage -->|rti / mixed| Urgency
   Urgency --> Routing[Routing<br/>registry lookup]
   Routing --> Drafting[Query rewriter]
@@ -38,7 +40,8 @@ flowchart LR
 ```
 intake
   ├─ awaiting_input ──▶ (answer) ──▶ intake
-  ├─ review_queue            (exempt; terminal until a human acts)
+  ├─ review_queue ──▶ closed            (reviewer upholds the exemption)
+  │             └──▶ intake            (reviewer releases it to filing)
   ├─ redirected              (grievance; terminal)
   └─ awaiting_approval
         ├─ declined          (terminal)
@@ -105,7 +108,49 @@ sequenceDiagram
 | Verifier-only writes | SQLite trigger `verifications_verifier_only` + short-lived lease | gate test |
 | CAPTCHA never solved | Filing stops at `/captcha`; only an operator endpoint completes it | TC1 / demo |
 | Instructions inside the request are data | Injection patterns logged as evidence, sentences stripped before drafting | X5 |
-| Exemptions stop filing | `triage` writes `exempt`; supervisor sets `review_queue` | TC3 |
+| Exemptions route to a human | deterministic 8(1)(j) rule or calibrated classifier at the review threshold; supervisor sets `review_queue` | TC3, `bench_review_routing` |
+| Operator routes need the operator token | `agent/auth.py` dependency on every queue, tracker, test and captcha-handoff route | `tests/test_api_auth.py` |
+| A citizen can only touch their own run | run token minted at creation, checked by `auth.authorize_run` | `tests/test_api_auth.py` |
+
+The 8(1)(j) rule fires only when a private *record* (address, phone, health, money,
+family, an identity document) meets a *subject* who is a person, or a named reference
+("Dr Kulkarni"). An identity-only request — "names of the officers who approved" — is
+treated as a request about a post unless the subject is a private individual, which is
+the codebook's designation-is-public, home-address-is-not line. The rule stops a run
+before drafting; the calibrated classifier only ever queues one for review.
+
+## Access control
+
+| Surface | Credential | What it opens |
+|---|---|---|
+| Citizen chat | none to start | create a run |
+| A single run | run token, returned once at creation | read it, answer its follow-up, approve or decline its own card |
+| Operator surface | `X-Operator-Token` = a per-account token, stored hashed; `RTI_OPERATOR_TOKEN` seeds the first account | review queue, all runs, tracker view, stored test results, CAPTCHA handoff |
+| Portal demo console | `RTI_ADMIN_TOKEN`, entered once as a sign-in; the cookie carries it | mock clock, CAPTCHA completion, failure switches |
+
+Accounts live in `operators` with a SHA-256 token hash, a role and a revocation time.
+`python -m scripts.operator add --name priya` prints a token once; `revoke` stops it
+without touching anyone else's. Every operator mutation writes an `operator_audit` row
+with the account name, so "who released this flagged request" has an answer.
+
+The dashboard keeps the run token in memory only and the operator token in
+`sessionStorage` after the **Operator access** button is used. Neither the operator
+token nor the portal admin token is ever rendered into a page, a draft or a log line;
+`tests/test_portal_auth.py` opens `/admin/clock` and a CAPTCHA page and asserts the
+string does not appear.
+
+## Review ownership
+
+`reviews` holds one row per flagged run: reason, source (`rule` or `classifier`), score,
+a due time, and who claimed and decided it. A flag is created by the supervisor in the
+same transaction that sets `review_queue`; the queue cannot contain a flag without a row.
+Claiming is exclusive, deciding requires the claim, and releasing requires a written
+reason. Releasing sets `review_released`, which the pipeline reads so the same rule does
+not re-queue the run on resume. Upholding closes the run with `exemption_upheld`; no fee
+and no filing exist in either case. `RTI_REVIEW_SLA_HOURS` (default 48) sets the target,
+and anything past it is surfaced as overdue rather than silently aging. `tests/test_api_auth.py` checks that
+every scoped route answers 401 without it, 403 for another client's run, and 404 for a
+run id that does not exist. Run creation is rate-limited per client (default 120/min).
 
 ## Why an independent verifier
 
@@ -152,6 +197,31 @@ Signed with HMAC-SHA256 over canonical JSON:
 The portal verifies the signature and checks destination and fee against the
 application. It never reads the agent database. `approved_at` gives the ordering
 evidence for TC4.
+
+## Portal adapters
+
+Filing and verification talk to a `PortalAdapter`, never to a transport directly:
+
+| Adapter | Used for |
+|---|---|
+| `HttpAdapter` | the hosted mock, where Chromium is not installed |
+| `PlaywrightAdapter` | local runs, driving the same form in a real browser |
+| `FixtureAdapter` | replaying recorded pages so the verifier can be tested with no portal |
+
+The adapter is a transport only: it submits an already approved payload and returns
+what the portal said. It holds no decision, and the gate stays in SQLite where the
+transport cannot reach it. `RTI_FILING_MODE` selects the transport (`auto` picks HTTP in
+production and Playwright locally).
+
+## Deadline worker
+
+`agent/worker.py` owns a `checks` queue in the same SQLite file: a filed request is
+enqueued with its next check time, and a claim (with a lease) makes sure only one
+worker runs a job. It starts as a thread inside the agent process by default, because
+the hosted SQLite lives on the instance; `python -m agent.worker` runs the same loop
+standalone. A restart re-reads the queue, so a 30-day deadline does not depend on
+somebody having the dashboard open. `tests/test_worker.py` kills and restarts the loop
+mid-claim and advances the clock.
 
 ## Deterministic judgment
 

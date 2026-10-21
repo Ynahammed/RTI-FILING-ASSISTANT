@@ -32,6 +32,8 @@ services:
         sync: false
       - key: RTI_ADMIN_TOKEN
         sync: false
+      - key: RTI_OPERATOR_TOKEN
+        sync: false
       - key: RTI_PORTAL_URL
         sync: false
       - key: RTI_DATA_DIR
