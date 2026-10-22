@@ -41,6 +41,10 @@
 
 * { box-sizing: border-box; }
 
+/* An author display rule beats the UA's [hidden] rule, so a badge with
+   display:inline-grid stayed visible while hidden. Nothing hidden should paint. */
+[hidden] { display: none !important; }
+
 html, body { height: 100%; }
 
 body {
