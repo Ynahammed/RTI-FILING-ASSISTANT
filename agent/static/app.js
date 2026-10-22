@@ -119,20 +119,29 @@ async function api(path, options = {}) {
 
 /* ----------------------------------------------------------------- voice */
 
-// The browser's own recognizer: no audio leaves through this app, and there is no
-// dependency or key. Locale follows the language picker, so a Telugu request is
-// transcribed as Telugu rather than translated.
+// The browser's own recognizer, so this app needs no key and stores no audio. The
+// audio does leave the device: Chromium and Safari stream it to the browser vendor's
+// speech service, which is why an embedded or privacy-stripped build always fails
+// with a `network` error even when the microphone is working. Locale follows the
+// language picker, so a Telugu request is transcribed as Telugu rather than translated.
 const VOICE_LOCALES = {
   en: "en-IN", te: "te-IN", hi: "hi-IN", mr: "mr-IN", kn: "kn-IN", ta: "ta-IN",
 };
 const VOICE_ERRORS = {
   "not-allowed": "Microphone access was blocked. Allow it in the browser settings, or type instead.",
-  "service-not-allowed": "The browser's speech service is not available. Type instead.",
+  "service-not-allowed": "This browser has no speech service to dictate to. Open the page in Chrome or Edge, or type instead.",
   "audio-capture": "No microphone was found. Type instead.",
   "no-speech": "Nothing was heard. Try again, or type instead.",
-  network: "The browser's speech service could not be reached. Type instead.",
+  network: "The browser's speech service, a vendor cloud service, could not be reached. Check the connection, a proxy or a firewall, or open the page in Chrome or Edge. Typing always works.",
   aborted: "",
 };
+
+// Electron and other embedded Chromium builds ship without the vendor's speech keys,
+// and some privacy forks strip the endpoint. The API object is still present there, so
+// the only way to fail gracefully instead of "speaking" into nothing is to notice the
+// build before the first attempt.
+const EMBEDDED_BROWSER = /\bElectron\//i.test(navigator.userAgent)
+  || /Android.*; wv\)/i.test(navigator.userAgent);
 const voice = { recognition: null, listening: false, supported: false, heard: false, lastError: "" };
 
 function voiceNote(message) {
@@ -167,6 +176,16 @@ function setupVoice() {
     btn.disabled = true;
     btn.setAttribute("aria-label", "Voice input is not available in this browser");
     voiceNote("Voice input is not available in this browser. Type instead.");
+    return;
+  }
+  if (EMBEDDED_BROWSER) {
+    btn.disabled = true;
+    btn.setAttribute("aria-label", "Voice input is unavailable in an embedded browser");
+    btn.title = "Voice input needs the browser's own speech service";
+    voiceNote(
+      "Voice input needs the browser's own speech service, and this embedded browser "
+      + "build has none. Open the dashboard in Chrome or Edge, or type below."
+    );
     return;
   }
   voice.supported = true;
