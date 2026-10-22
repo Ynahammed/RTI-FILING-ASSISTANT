@@ -206,6 +206,20 @@ _thread: threading.Thread | None = None
 _guard = threading.Lock()
 
 
+def _sweep_notifications(conn: sqlite3.Connection) -> None:
+    """Send due alerts without letting a transport failure kill the worker."""
+    if not config.NOTIFY_ENABLED:
+        return
+    from agent import notify  # local import keeps the module graph acyclic
+
+    try:
+        stats = notify.scan_and_send(conn)
+        if stats.get("created") or stats.get("sent"):
+            print(f"notify: {stats}", flush=True)
+    except Exception as exc:  # an alert is never worth stopping a deadline check
+        print(f"notify sweep failed: {type(exc).__name__}: {exc}", flush=True)
+
+
 def start_background_worker(interval_seconds: float | None = None) -> bool:
     """Start the in-process loop once. Returns False when already running."""
     global _thread
@@ -223,6 +237,7 @@ def start_background_worker(interval_seconds: float | None = None) -> bool:
                     stats = run_once(conn)
                     if stats["claimed"]:
                         print(f"worker: {stats}", flush=True)
+                    _sweep_notifications(conn)
                 except Exception as exc:  # the loop must survive one bad tick
                     print(f"worker tick failed: {type(exc).__name__}: {exc}", flush=True)
                 finally:
@@ -252,9 +267,11 @@ def main() -> int:
         db.init_db(conn)
         if args.once:
             print(run_once(conn))
+            _sweep_notifications(conn)
             return 0
         while True:
             print(run_once(conn), flush=True)
+            _sweep_notifications(conn)
             time.sleep(args.interval)
     except KeyboardInterrupt:
         return 0

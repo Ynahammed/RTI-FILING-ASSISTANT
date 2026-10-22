@@ -132,5 +132,24 @@ REVIEW_SLA_HOURS = int(os.getenv("RTI_REVIEW_SLA_HOURS", "48"))
 # How often a filed request is re-checked against the portal.
 CHECK_INTERVAL_HOURS = float(os.getenv("RTI_CHECK_INTERVAL_HOURS", "6"))
 
+# Outbound alerts. Off by default: the demo has no mail server and a hosted demo
+# should not need one. With no channel configured the sweep still records what it
+# would send, and those rows stay pending rather than being lost.
+NOTIFY_ENABLED = os.getenv("RTI_NOTIFY_ENABLED", "0") == "1"
+NOTIFY_WEBHOOK_URL = os.getenv("RTI_NOTIFY_WEBHOOK_URL", "").strip()
+NOTIFY_WEBHOOK_TIMEOUT_SECONDS = float(os.getenv("RTI_NOTIFY_WEBHOOK_TIMEOUT_SECONDS", "10"))
+# Email needs both a recipient and an SMTP host before it counts as a channel.
+NOTIFY_EMAIL_TO = os.getenv("RTI_NOTIFY_EMAIL_TO", "").strip()
+SMTP_HOST = os.getenv("RTI_SMTP_HOST", "").strip()
+SMTP_PORT = int(os.getenv("RTI_SMTP_PORT", "587"))
+SMTP_USER = os.getenv("RTI_SMTP_USER", "").strip()
+SMTP_PASSWORD = os.getenv("RTI_SMTP_PASSWORD", "")
+SMTP_FROM = os.getenv("RTI_SMTP_FROM", "").strip()
+SMTP_STARTTLS = os.getenv("RTI_SMTP_STARTTLS", "1") == "1"
+# How early a review target and a response deadline start alerting.
+NOTIFY_DUE_SOON_HOURS = float(os.getenv("RTI_NOTIFY_DUE_SOON_HOURS", "12"))
+NOTIFY_DEADLINE_HOURS = float(os.getenv("RTI_NOTIFY_DEADLINE_HOURS", "72"))
+NOTIFY_MAX_ATTEMPTS = int(os.getenv("RTI_NOTIFY_MAX_ATTEMPTS", "3"))
+
 RULES_PATH = PROJECT_ROOT / "rules" / "rti_rules.json"
 STATIC_DIR = PROJECT_ROOT / "agent" / "static"

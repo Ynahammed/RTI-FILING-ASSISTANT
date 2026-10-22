@@ -20,7 +20,7 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from agent import db, worker
+from agent import db, notify, worker
 from common import config, database
 from portal import db as portal_db
 
@@ -183,6 +183,21 @@ def test_review_claim_and_decision(agent):
     assert review["assigned_to"] == "operator"
     decided = db.decide_review(agent, run_id, operator, "release", "public interest")
     assert decided["decision"] == "release"
+
+
+def test_notifications_are_deduplicated(agent):
+    run_id = _run(agent)
+    past = (datetime.now(timezone.utc) - timedelta(hours=2)).isoformat(timespec="seconds")
+    agent.execute(
+        """INSERT INTO reviews(review_id, run_id, reason, source, status, due_at, created_at)
+           VALUES ('REV-1', ?, 'flag', 'test', 'open', ?, ?)""",
+        (run_id, past, db.now_iso()),
+    )
+    first = notify.scan(agent)
+    second = notify.scan(agent)
+    assert len(first) == 1
+    assert second == []
+    assert notify.list_recent(agent)[0]["kind"] == "review_overdue"
 
 
 def test_job_claim_is_exclusive_and_reclaimable(agent):
