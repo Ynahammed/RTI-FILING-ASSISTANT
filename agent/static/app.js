@@ -30,6 +30,9 @@ const STATUS_LABELS = {
   failed: "Needs attention",
   tracking: "Tracking",
   appeal_ready: "First appeal ready",
+  appeal_filed: "First appeal filed",
+  second_appeal_ready: "Second appeal ready",
+  complaint_ready: "Complaint ready",
   closed: "Closed",
 };
 
@@ -42,11 +45,33 @@ const STATUS_TONE = {
   awaiting_captcha: "warn",
   review_queue: "warn",
   appeal_ready: "warn",
+  appeal_filed: "info",
+  second_appeal_ready: "warn",
+  complaint_ready: "warn",
   filed_unverified: "warn",
   failed: "bad",
   declined: "bad",
   redirected: "info",
 };
+
+// Appeal-stage runs all approve through the same endpoint; only the wording and the
+// draft kind differ. Keeping the mapping in one place stops a new stage from
+// silently rendering without its approve button.
+const APPEAL_STATUSES = new Set(["appeal_ready", "second_appeal_ready", "complaint_ready"]);
+const APPEAL_KINDS = {
+  appeal_ready: "appeal_first",
+  second_appeal_ready: "appeal_second",
+  complaint_ready: "complaint",
+};
+const APPEAL_COPY = {
+  appeal_ready: { card: "Appeal awaiting approval", draft: "First appeal draft", result: "Section 19 first appeal" },
+  second_appeal_ready: { card: "Second appeal awaiting approval", draft: "Second appeal draft", result: "Section 19(3) second appeal" },
+  complaint_ready: { card: "Complaint awaiting approval", draft: "Complaint draft", result: "Section 18 complaint" },
+};
+
+function appealCopy(status) {
+  return APPEAL_COPY[status] || { card: "Appeal awaiting approval", draft: "Appeal draft", result: "Appeal" };
+}
 
 const esc = (value) =>
   String(value ?? "").replace(/[&<>"']/g, (c) => ({
@@ -68,7 +93,7 @@ function fmtDate(iso, withTime = false) {
 function toast(message, isError = false) {
   const el = document.createElement("div");
   el.className = `toast${isError ? " error" : ""}`;
-  el.setAttribute("role", "status");
+  el.setAttribute("role", isError ? "alert" : "status");
   el.textContent = message;
   document.body.appendChild(el);
   setTimeout(() => el.remove(), isError ? 7000 : 4000);
@@ -90,6 +115,110 @@ async function api(path, options = {}) {
     throw new Error((body && (body.detail || body.message)) || `${resp.status} ${resp.statusText}`);
   }
   return body;
+}
+
+/* ----------------------------------------------------------------- voice */
+
+// The browser's own recognizer: no audio leaves through this app, and there is no
+// dependency or key. Locale follows the language picker, so a Telugu request is
+// transcribed as Telugu rather than translated.
+const VOICE_LOCALES = {
+  en: "en-IN", te: "te-IN", hi: "hi-IN", mr: "mr-IN", kn: "kn-IN", ta: "ta-IN",
+};
+const VOICE_ERRORS = {
+  "not-allowed": "Microphone access was blocked. Allow it in the browser settings, or type instead.",
+  "service-not-allowed": "The browser's speech service is not available. Type instead.",
+  "audio-capture": "No microphone was found. Type instead.",
+  "no-speech": "Nothing was heard. Try again, or type instead.",
+  network: "The browser's speech service could not be reached. Type instead.",
+  aborted: "",
+};
+const voice = { recognition: null, listening: false, supported: false, heard: false, lastError: "" };
+
+function voiceNote(message) {
+  const note = $("#voice-note");
+  if (note) note.textContent = message;
+}
+
+function voiceLocale() {
+  return VOICE_LOCALES[$("#language").value] || "en-IN";
+}
+
+function setListening(listening) {
+  voice.listening = listening;
+  const btn = $("#voice-btn");
+  if (!btn) return;
+  btn.setAttribute("aria-pressed", String(listening));
+  btn.setAttribute("aria-label", listening ? "Stop voice input" : "Start voice input");
+  btn.classList.toggle("listening", listening);
+}
+
+function stopVoice() {
+  if (!voice.recognition) return;
+  try { voice.recognition.stop(); } catch (e) { /* already stopped */ }
+  setListening(false);
+}
+
+function setupVoice() {
+  const btn = $("#voice-btn");
+  if (!btn) return;
+  const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!Recognition) {
+    btn.disabled = true;
+    btn.setAttribute("aria-label", "Voice input is not available in this browser");
+    voiceNote("Voice input is not available in this browser. Type instead.");
+    return;
+  }
+  voice.supported = true;
+  const recognition = new Recognition();
+  recognition.continuous = false;
+  recognition.interimResults = false;
+  recognition.maxAlternatives = 1;
+
+  recognition.onstart = () => {
+    voice.heard = false;
+    voice.lastError = "";
+    setListening(true);
+    voiceNote("Listening… speak your request, then press Send.");
+  };
+  recognition.onresult = (event) => {
+    const transcript = Array.from(event.results || [])
+      .map((result) => (result[0] && result[0].transcript ? result[0].transcript : ""))
+      .join(" ")
+      .trim();
+    if (!transcript) return;
+    voice.heard = true;
+    const input = $("#chat-input");
+    const current = input.value.trim();
+    input.value = current ? `${current} ${transcript}` : transcript;
+    input.focus();
+    voiceNote("Added to your message. Review it, then press Send.");
+  };
+  recognition.onerror = (event) => {
+    voice.lastError = VOICE_ERRORS[event.error] ?? "Voice input stopped. Type instead.";
+    if (voice.lastError) voiceNote(voice.lastError);
+  };
+  recognition.onend = () => {
+    setListening(false);
+    // Keep a result or an error on screen; clear the transient prompt otherwise.
+    if (!voice.heard && !voice.lastError) voiceNote("");
+  };
+
+  voice.recognition = recognition;
+  btn.addEventListener("click", () => {
+    if (voice.listening) { stopVoice(); voiceNote(""); return; }
+    try {
+      recognition.lang = voiceLocale();
+      voiceNote("Starting the microphone…");
+      recognition.start();
+    } catch (e) {
+      setListening(false);
+      voiceNote("The microphone could not start. Try again, or type instead.");
+    }
+  });
+  $("#language").addEventListener("change", () => {
+    if (voice.listening) stopVoice();
+  });
 }
 
 /* ------------------------------------------------------------------ chat */
@@ -256,8 +385,9 @@ function renderApproval() {
   const status = d.run.status;
   if (!approval) { box.innerHTML = ""; return; }
 
-  const draft = latestDraft(d, status === "appeal_ready" ? "appeal_first" : "application")
-    || latestDraft(d, "application");
+  const appealKind = APPEAL_KINDS[status];
+  const appeal = appealKind ? appealCopy(status) : null;
+  const draft = appealKind ? latestDraft(d, appealKind) : latestDraft(d, "application");
   const routing = routingFor(d, approval.destination);
   const destination = routing && routing.output
     ? `${routing.output.authority_name}<br><span class="hint">${esc(routing.output.pio || "")} · ${esc(approval.destination)}</span>`
@@ -271,11 +401,11 @@ function renderApproval() {
          </div>`
       : "";
     box.innerHTML = `<section class="card approval">
-      <h3>${status === "appeal_ready" ? "Appeal awaiting approval" : "Approval card"}</h3>
+      <h3>${appeal ? appeal.card : "Approval card"}</h3>
       <p class="hint">Nothing is submitted or paid until you approve this exact draft, destination and fee.</p>
       <h4>Destination</h4>
       <p>${destination}</p>
-      <h4>${status === "appeal_ready" ? "First appeal draft" : "Draft application"}</h4>
+      <h4>${appeal ? appeal.draft : "Draft application"}</h4>
       <div class="draft">${esc(draft ? draft.text : "Draft unavailable")}</div>
       ${draft && draft.rewrite_notes.length ? `<h4>What changed and why</h4>
         <ul class="notes">${draft.rewrite_notes.map((n) => `<li>${esc(n)}</li>`).join("")}</ul>` : ""}
@@ -314,7 +444,9 @@ function renderResult() {
   const run = d.run;
   const verification = d.verification;
   const tracker = d.tracker;
-  const appeal = latestDraft(d, "appeal_first");
+  const appealKind = APPEAL_KINDS[run.status];
+  const appeal = appealKind ? latestDraft(d, appealKind) : latestDraft(d, "appeal_first");
+  const appealLabel = appealKind ? appealCopy(run.status).result : "Section 19 first appeal";
   if (!run.reg_no && !verification && !tracker && !appeal) { box.innerHTML = ""; return; }
 
   const tone = verification && verification.verification_status === "verified" ? "result"
@@ -352,10 +484,10 @@ function renderResult() {
     <p style="margin-top:8px">${matchBadge}</p>
     ${comparison}
     ${trackerBlock}
-    ${appeal ? `<h4>Section 19 first appeal</h4>
+    ${appeal ? `<h4>${esc(appealLabel)}</h4>
       <div class="draft" style="max-height:150px">${esc(appeal.text)}</div>
-      ${run.status === "appeal_ready" ? `<div class="card-actions"><button class="primary" data-action="approve-appeal" type="button">Approve appeal</button></div>` : ""}` : ""}
-    ${run.portal_app_id && ["verified", "filed_unverified", "tracking", "appeal_ready"].includes(run.status)
+      ${APPEAL_STATUSES.has(run.status) ? `<div class="card-actions"><button class="primary" data-action="approve-appeal" type="button">Approve ${run.status === "complaint_ready" ? "complaint" : "appeal"}</button></div>` : ""}` : ""}
+    ${run.portal_app_id && ["verified", "filed_unverified", "tracking", "appeal_filed", "appeal_ready", "second_appeal_ready", "complaint_ready"].includes(run.status)
       ? `<div class="card-actions"><button class="ghost" data-action="track" type="button">Re-check the portal</button></div>` : ""}
   </section>`;
 }
@@ -436,7 +568,7 @@ async function loadReview() {
       ? `${counts.open} open · ${counts.unassigned} unclaimed · ${counts.overdue} past the ${REVIEW_SLA_HOURS}h target`
       : "Nothing is waiting for review.";
     list.innerHTML = rows.length ? rows.map((r) => `
-      <article class="queue-card"${r.overdue ? ' style="border-left-color:#b91c1c"' : ""}>
+      <article class="queue-card"${r.overdue ? ' style="border-left-color:var(--bad)"' : ""}>
         <div class="meta">
           <span class="pill ${r.overdue ? "bad" : "warn"}">${esc(r.source === "rule" ? "8(1)(j) rule" : "classifier")}</span>
           <span>${esc(r.exemption ? r.exemption.rule_ref : "")}</span>
@@ -469,7 +601,7 @@ async function loadTracker() {
     const [rows, clock] = await Promise.all([api("/api/tracker"), api("/api/portal-clock")]);
     $("#portal-clock").textContent = clock.mock_now ? `Mock clock ${fmtDate(clock.mock_now, true)}` : "Mock clock unavailable";
     list.innerHTML = rows.length ? rows.map((r) => `
-      <article class="queue-card" style="border-left-color:${r.reply_state === "no_reply" ? "#b45309" : "#0e7490"}">
+      <article class="queue-card" style="border-left-color:${r.reply_state === "no_reply" ? "var(--amber-line)" : "var(--accent)"}">
         <div class="track-row">
           <div>
             <strong>${esc(r.reg_no || "not filed")}</strong>
@@ -540,6 +672,7 @@ function switchView(view) {
     const active = tab.dataset.view === view;
     tab.classList.toggle("active", active);
     tab.setAttribute("aria-selected", String(active));
+    tab.tabIndex = active ? 0 : -1;
   });
   if (view === "review") loadReview();
   if (view === "tracker") loadTracker();
@@ -564,12 +697,27 @@ async function openRun(runId) {
 /* ------------------------------------------------------------------ init */
 
 function bind() {
-  document.querySelectorAll(".tab").forEach((tab) => {
+  // Tabs follow the ARIA tabs pattern: one tab stop for the group, arrows move
+  // between tabs, Home and End jump to either end.
+  const tabs = Array.from(document.querySelectorAll(".tab"));
+  tabs.forEach((tab, index) => {
     tab.addEventListener("click", () => switchView(tab.dataset.view));
+    tab.addEventListener("keydown", (event) => {
+      const step = { ArrowRight: 1, ArrowLeft: -1, Home: 0, End: 0 }[event.key];
+      if (step === undefined) return;
+      event.preventDefault();
+      let next = index + step;
+      if (event.key === "Home") next = 0;
+      if (event.key === "End") next = tabs.length - 1;
+      next = (next + tabs.length) % tabs.length;
+      tabs[next].focus();
+      switchView(tabs[next].dataset.view);
+    });
   });
 
   $("#chat-form").addEventListener("submit", (event) => {
     event.preventDefault();
+    stopVoice();
     const text = $("#chat-input").value.trim();
     sendMessage(text, $("#language").value);
   });
@@ -686,6 +834,7 @@ function bind() {
 
 async function init() {
   bind();
+  setupVoice();
   try {
     const cfg = await api("/api/config");
     state.portalUrl = (cfg.portal_url || state.portalUrl).replace(/\/$/, "");
