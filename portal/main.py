@@ -27,6 +27,11 @@ def _startup() -> None:
 
 ADMIN_COOKIE = "rti_admin"
 LOGIN_MAX_AGE = 8 * 60 * 60
+CONSOLE_TOKEN_HINT = (
+    "That token is not the demo console token. The portal console uses RTI_ADMIN_TOKEN; "
+    "the dashboard's RTI_OPERATOR_TOKEN is a different secret and does not work here. "
+    "Sign in once at the demo console, or paste the console token from the deployment's secrets."
+)
 
 
 def _cookie_ok(request: Request | None) -> bool:
@@ -49,6 +54,29 @@ def check_admin(token: str | None, request: Request | None = None) -> None:
     if token and hmac.compare_digest(token, config.ADMIN_TOKEN):
         return
     raise HTTPException(status_code=403, detail="demo operator token required")
+
+
+def _wants_html(request: Request | None) -> bool:
+    """True for browser form posts, false for the agent and scripts.
+
+    A failed console action used to answer every caller with a bare JSON 403, so a
+    browser landed on a dead page that never named the token it wanted. Browsers get
+    a page back; the JSON contract for scripts stays exactly as it was.
+    """
+    if request is None:
+        return False
+    return "text/html" in (request.headers.get("accept") or "")
+
+
+def _admin_check_or_login(request: Request, token: str) -> Any:
+    """Send the browser back to sign in; keep the 403 for everything else."""
+    try:
+        check_admin(token, request)
+    except HTTPException:
+        if not _wants_html(request):
+            raise
+        return RedirectResponse("/admin/clock", status_code=303)
+    return None
 
 
 def _fmt_deadline(app_row: Any) -> str:
@@ -292,7 +320,9 @@ def admin_logout() -> Any:
 
 @app.post("/admin/clock")
 def clock_advance(request: Request, admin_token: str = Form(""), days: int = Form(0)) -> Any:
-    check_admin(admin_token, request)
+    redirect = _admin_check_or_login(request, admin_token)
+    if redirect:
+        return redirect
     conn = db.connect()
     try:
         db.advance_clock(conn, max(0, days))
@@ -308,7 +338,9 @@ def simulate(
     timeout_next_filing: str | None = Form(None),
     skew_next_deadline_days: int = Form(0),
 ) -> Any:
-    check_admin(admin_token, request)
+    redirect = _admin_check_or_login(request, admin_token)
+    if redirect:
+        return redirect
     conn = db.connect()
     try:
         db.set_setting(conn, "timeout_next_filing", "1" if timeout_next_filing else "0")
@@ -320,12 +352,17 @@ def simulate(
 
 @app.post("/admin/captcha/{app_id}/complete")
 def admin_captcha(app_id: str, request: Request, admin_token: str = Form("")) -> Any:
-    check_admin(admin_token, request)
+    try:
+        check_admin(admin_token, request)
+    except HTTPException:
+        if not _wants_html(request):
+            raise
+        # The CAPTCHA page posts here with a typed token, so a wrong paste must say
+        # which token it wanted instead of dropping the operator on a 403 page.
+        return ui.captcha_page(_get_app(app_id), error=CONSOLE_TOKEN_HINT, status_code=403)
+    _get_app(app_id)  # unknown applications still 404, as before
     conn = db.connect()
     try:
-        row = conn.execute("SELECT * FROM applications WHERE app_id=?", (app_id,)).fetchone()
-        if not row:
-            raise HTTPException(status_code=404, detail="application not found")
         db.captcha_complete(conn, app_id)
     finally:
         conn.close()
@@ -336,7 +373,9 @@ def admin_captcha(app_id: str, request: Request, admin_token: str = Form("")) ->
 def admin_reply(
     app_id: str, request: Request, admin_token: str = Form(""), evasive: str | None = Form(None)
 ) -> Any:
-    check_admin(admin_token, request)
+    redirect = _admin_check_or_login(request, admin_token)
+    if redirect:
+        return redirect
     conn = db.connect()
     try:
         body = (
@@ -352,7 +391,9 @@ def admin_reply(
 
 @app.post("/admin/confirmation/{app_id}/restore")
 def admin_restore(app_id: str, request: Request, admin_token: str = Form("")) -> Any:
-    check_admin(admin_token, request)
+    redirect = _admin_check_or_login(request, admin_token)
+    if redirect:
+        return redirect
     conn = db.connect()
     try:
         conn.execute("UPDATE applications SET confirmation_available=1 WHERE app_id=?", (app_id,))

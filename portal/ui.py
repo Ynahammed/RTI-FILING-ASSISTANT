@@ -180,7 +180,8 @@ The portal did not create a duplicate.</div>
     return layout("Already received", body)
 
 
-def captcha_page(app: Any) -> HTMLResponse:
+def captcha_page(app: Any, error: str = "", status_code: int = 200) -> HTMLResponse:
+    alert = f"<div class='alert' role='alert'>{e(error)}</div>" if error else ""
     body = f"""
 <div class="card">
 <h2>Step 2 of 3 &middot; Human verification</h2>
@@ -188,18 +189,21 @@ def captcha_page(app: Any) -> HTMLResponse:
 <div class="warnbox"><strong>Automation must stop here.</strong> The agent is not allowed to solve a
 challenge. A demo operator completes it below, or uses the demo console. This mirrors the brief's
 manual-handoff rule.</div>
+{alert}
 <form method="post" action="/admin/captcha/{e(app['app_id'])}/complete">
-<label for="admin_token">Demo operator token</label>
+<label for="admin_token">Demo console token</label>
 <input id="admin_token" name="admin_token" type="password" value=""
-       placeholder="paste the operator token" autocomplete="off">
-<p class="lede">Mock challenge: <strong>select the traffic lights</strong> (not implemented — this is a placeholder, not a real challenge).</p>
+       placeholder="paste the console token" autocomplete="off">
+<p class="lede">This field wants the portal's own console token. Signing in once at
+<a href="/admin/clock">the demo console</a> also works, and its buttons then stop asking.</p>
+<p class="lede">Mock challenge: <strong>select the traffic lights</strong> (not implemented &mdash; this is a placeholder, not a real challenge).</p>
 <button type="submit">Complete challenge as demo operator</button>
 <p class="lede">The agent itself stops here. In the dashboard, the approval card's
 <strong>Demo operator: complete CAPTCHA</strong> button does the same handoff with the
 token held server-side.</p>
 </form>
 </div>"""
-    return layout("CAPTCHA", body)
+    return layout("CAPTCHA", body, status=status_code)
 
 
 def pay_page(app: Any, fee: int, error: str = "") -> HTMLResponse:

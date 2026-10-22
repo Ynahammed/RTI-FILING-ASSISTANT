@@ -101,3 +101,42 @@ def test_form_token_still_works_for_scripts(client):
 def test_operator_action_without_a_token_is_rejected(client):
     response = client.post("/admin/clock", data={"days": "7"}, follow_redirects=False)
     assert response.status_code == 403
+
+
+HTML_ACCEPT = {"accept": "text/html,application/xhtml+xml,application/xml;q=0.9"}
+
+
+def test_a_wrong_token_on_the_captcha_page_explains_which_token_it_wanted(client, application):
+    page = client.post(
+        f"/admin/captcha/{application}/complete",
+        data={"admin_token": "the-dashboard-operator-token"},
+        headers=HTML_ACCEPT,
+    )
+    assert page.status_code == 403
+    assert "RTI_ADMIN_TOKEN" in page.text
+    assert "RTI_OPERATOR_TOKEN" in page.text
+    assert config.ADMIN_TOKEN not in page.text
+    assert f'action="/admin/captcha/{application}/complete"' in page.text
+
+
+def test_the_agent_and_scripts_still_get_json_when_the_token_is_wrong(client, application):
+    page = client.post(
+        f"/admin/captcha/{application}/complete", data={"admin_token": "not-the-token"}
+    )
+    assert page.status_code == 403
+    assert page.json() == {"detail": "demo operator token required"}
+
+
+def test_a_lapsed_console_session_returns_the_browser_to_sign_in(client):
+    response = client.post(
+        "/admin/clock", data={"days": "7"}, headers=HTML_ACCEPT, follow_redirects=False
+    )
+    assert response.status_code == 303
+    assert response.headers["location"] == "/admin/clock"
+
+
+def test_cookie_session_still_completes_the_captcha(client, application):
+    client.post("/admin/login", data={"admin_token": config.ADMIN_TOKEN}, follow_redirects=False)
+    response = client.post(f"/admin/captcha/{application}/complete", follow_redirects=False)
+    assert response.status_code == 303
+    assert response.headers["location"] == f"/pay/{application}"
