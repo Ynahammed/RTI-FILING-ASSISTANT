@@ -13,7 +13,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
-from common import config
+from common import config, database
 
 IST = timezone(timedelta(hours=5, minutes=30))
 
@@ -97,13 +97,10 @@ CREATE TABLE IF NOT EXISTS events (
 
 
 def connect(db_path: Path | None = None) -> sqlite3.Connection:
-    path = Path(db_path or config.PORTAL_DB)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(path, timeout=15, isolation_level=None)
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA journal_mode=WAL")
-    conn.execute("PRAGMA busy_timeout=15000")
-    return conn
+    """Open the configured backend, or the SQLite file for local development."""
+    if config.PORTAL_DATABASE_URL:
+        return database.connect(config.PORTAL_DATABASE_URL)
+    return database.connect(db_path or config.PORTAL_DB)
 
 
 def utc_now() -> datetime:
@@ -324,6 +321,9 @@ def record_payment(
     # read-then-update atomic; a second payer waits, then sees the first row.
     conn.execute("BEGIN IMMEDIATE")
     try:
+        # SQLite's BEGIN IMMEDIATE already serialises writers. Postgres does not,
+        # so registration allocation takes an explicit transaction lock.
+        database.serialise_registration(conn)
         reg_no = next_registration(conn, app["authority_code"], now)
         deadline = compute_deadline(now, bool(app["urgent"]))
         displayed = deadline + timedelta(days=skew_days)

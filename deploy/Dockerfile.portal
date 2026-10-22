@@ -10,7 +10,8 @@ WORKDIR /app
 RUN pip install --no-cache-dir \
     "fastapi>=0.110" \
     "uvicorn[standard]>=0.27" \
-    "python-multipart>=0.0.9"
+    "python-multipart>=0.0.9" \
+    "psycopg[binary]>=3.2"
 
 COPY common ./common
 COPY portal ./portal

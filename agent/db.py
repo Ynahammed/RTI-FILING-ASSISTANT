@@ -18,11 +18,11 @@ import secrets
 import sqlite3
 import threading
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Callable
 
-from common import config
+from common import config, database
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS runs (
@@ -140,7 +140,10 @@ CREATE TABLE IF NOT EXISTS tracker (
     reply_state TEXT NOT NULL DEFAULT 'awaiting',
     appeal_draft_id TEXT,
     transferred_to TEXT,
-    last_checked_at TEXT
+    last_checked_at TEXT,
+    appeal_filed_at TEXT,
+    second_appeal_draft_id TEXT,
+    complaint_draft_id TEXT
 );
 
 CREATE TABLE IF NOT EXISTS test_results (
@@ -256,6 +259,25 @@ CREATE TABLE IF NOT EXISTS rate_limits (
     count INTEGER NOT NULL
 );
 
+-- Outbound alerts. A dedupe key makes the sweep idempotent: a restart or a second
+-- worker tick cannot send the same overdue flag twice.
+CREATE TABLE IF NOT EXISTS notifications (
+    notification_id TEXT PRIMARY KEY,
+    kind TEXT NOT NULL,
+    run_id TEXT,
+    dedupe_key TEXT NOT NULL UNIQUE,
+    channel TEXT NOT NULL,
+    target TEXT NOT NULL DEFAULT '',
+    payload TEXT NOT NULL DEFAULT '{}',
+    status TEXT NOT NULL DEFAULT 'pending',
+    attempts INTEGER NOT NULL DEFAULT 0,
+    last_error TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL,
+    sent_at TEXT
+);
+
+CREATE INDEX IF NOT EXISTS notifications_status ON notifications(status, created_at);
+
 CREATE TRIGGER IF NOT EXISTS actions_require_approval
 BEFORE INSERT ON actions
 WHEN NEW.type IN ('payment', 'submit')
@@ -302,21 +324,75 @@ BEGIN
 END;
 """
 
+# The same three guarantees as the SQLite triggers in SCHEMA, written for
+# Postgres. They live in the database, not the application, for the same reason:
+# a bug in the agent must not be able to write a payment without an approval, edit
+# an approved approval, or forge a verification.
+POSTGRES_TRIGGERS = """
+CREATE OR REPLACE FUNCTION rti_actions_require_approval() RETURNS trigger AS $$
+BEGIN
+    IF NEW.type IN ('payment', 'submit') AND NOT EXISTS (
+        SELECT 1 FROM approvals
+         WHERE draft_id = NEW.draft_id
+           AND destination = NEW.destination
+           AND status = 'approved'
+    ) THEN
+        RAISE EXCEPTION 'APPROVAL_REQUIRED: no approved approval for this draft and destination';
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS actions_require_approval ON actions;
+CREATE TRIGGER actions_require_approval
+BEFORE INSERT ON actions
+FOR EACH ROW EXECUTE FUNCTION rti_actions_require_approval();
+
+CREATE OR REPLACE FUNCTION rti_approvals_locked_after_approval() RETURNS trigger AS $$
+BEGIN
+    IF OLD.status = 'approved'
+       AND (NEW.status <> 'approved' OR NEW.token IS DISTINCT FROM OLD.token) THEN
+        RAISE EXCEPTION 'APPROVAL_LOCKED: an approved approval cannot be edited';
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS approvals_locked_after_approval ON approvals;
+CREATE TRIGGER approvals_locked_after_approval
+BEFORE UPDATE ON approvals
+FOR EACH ROW EXECUTE FUNCTION rti_approvals_locked_after_approval();
+
+CREATE OR REPLACE FUNCTION rti_verifications_verifier_only() RETURNS trigger AS $$
+BEGIN
+    IF NEW.writer_token IS NULL OR NOT EXISTS (
+        SELECT 1 FROM verifier_tokens WHERE token = NEW.writer_token
+    ) THEN
+        RAISE EXCEPTION 'VERIFIER_LEASE_REQUIRED: verifications are writable only by the verifier service';
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS verifications_verifier_only ON verifications;
+CREATE TRIGGER verifications_verifier_only
+BEFORE INSERT ON verifications
+FOR EACH ROW EXECUTE FUNCTION rti_verifications_verifier_only();
+"""
+
 RUN_STATUSES = {
     "intake", "awaiting_input", "triaged", "review_queue", "redirected",
     "awaiting_approval", "declined", "awaiting_captcha", "filing", "filed",
-    "filed_unverified", "verified", "tracking", "appeal_ready", "closed", "failed",
+    "filed_unverified", "verified", "tracking", "appeal_ready", "appeal_filed",
+    "second_appeal_ready", "complaint_ready", "closed", "failed",
 }
 
 
 def connect(db_path: Path | None = None) -> sqlite3.Connection:
-    path = Path(db_path or config.AGENT_DB)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(path, timeout=15, isolation_level=None)
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA journal_mode=WAL")
-    conn.execute("PRAGMA busy_timeout=15000")
-    return conn
+    """Open the configured backend, or the SQLite file for local development."""
+    if config.AGENT_DATABASE_URL:
+        return database.connect(config.AGENT_DATABASE_URL)
+    return database.connect(db_path or config.AGENT_DB)
 
 
 def now_iso() -> str:
@@ -348,6 +424,23 @@ def bootstrap_operator(conn: sqlite3.Connection, token: str | None = None) -> No
     )
 
 
+# Columns added after a database already exists. `CREATE TABLE IF NOT EXISTS`
+# does not alter an existing table, so an upgrade needs an explicit ALTER. Each
+# entry is (table, column, declaration); the helper checks PRAGMA table_info first.
+MIGRATIONS = [
+    ("tracker", "appeal_filed_at", "TEXT"),
+    ("tracker", "second_appeal_draft_id", "TEXT"),
+    ("tracker", "complaint_draft_id", "TEXT"),
+]
+
+
+def _migrate(conn: sqlite3.Connection) -> None:
+    for table, column, declaration in MIGRATIONS:
+        existing = {row["name"] for row in conn.execute(f"PRAGMA table_info({table})")}
+        if column not in existing:
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {declaration}")
+
+
 def init_db(conn: sqlite3.Connection | None = None, *, force: bool = False) -> sqlite3.Connection:
     """Create the schema once per database file per process.
 
@@ -356,16 +449,25 @@ def init_db(conn: sqlite3.Connection | None = None, *, force: bool = False) -> s
     the whole service, which showed up as p95 latency rather than as an error.
     """
     conn = conn or connect()
-    row = conn.execute("PRAGMA database_list").fetchone()
-    path = str(row["file"] or "")
-    if force or path not in _schema_ready:
+    if database.is_postgres(conn):
+        location = database.describe(conn)
+    else:
+        row = conn.execute("PRAGMA database_list").fetchone()
+        location = str(row["file"] or "")
+    if force or location not in _schema_ready:
         with _schema_lock:
-            if force or path not in _schema_ready:
+            if force or location not in _schema_ready:
                 conn.executescript(SCHEMA)
-                conn.executescript(VERIFIER_TRIGGER)
+                if database.is_postgres(conn):
+                    # The shared SCHEMA carries SQLite trigger bodies for their
+                    # WHEN clauses; Postgres gets explicit PL/pgSQL equivalents.
+                    conn.executescript(POSTGRES_TRIGGERS)
+                else:
+                    conn.executescript(VERIFIER_TRIGGER)
+                _migrate(conn)
                 seed_precedents(conn)
                 bootstrap_operator(conn)
-                _schema_ready.add(path)
+                _schema_ready.add(location)
     return conn
 
 
@@ -815,7 +917,8 @@ def approve(conn: sqlite3.Connection, run_id: str) -> sqlite3.Row:
 
 def decline(conn: sqlite3.Connection, run_id: str, reason: str) -> None:
     row = conn.execute(
-        "SELECT * FROM approvals WHERE run_id=? ORDER BY created_at DESC LIMIT 1", (run_id,)
+        "SELECT * FROM approvals WHERE run_id=? ORDER BY created_at DESC, rowid DESC LIMIT 1",
+        (run_id,),
     ).fetchone()
     if not row:
         raise ValueError("no approval card exists for this run")
@@ -833,8 +936,11 @@ def decline(conn: sqlite3.Connection, run_id: str, reason: str) -> None:
 
 
 def current_approval(conn: sqlite3.Connection, run_id: str) -> sqlite3.Row | None:
+    # Two cards created in the same second used to be ordered arbitrarily; the
+    # appeal ladder creates a second approval for the same run.
     return conn.execute(
-        "SELECT * FROM approvals WHERE run_id=? ORDER BY created_at DESC LIMIT 1", (run_id,)
+        "SELECT * FROM approvals WHERE run_id=? ORDER BY created_at DESC, rowid DESC LIMIT 1",
+        (run_id,),
     ).fetchone()
 
 
@@ -863,7 +969,7 @@ def record_action(
                VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?)""",
             (action_id, run_id, action_type, draft_id, destination, key, json.dumps(request), ts, ts),
         )
-    except sqlite3.IntegrityError as exc:
+    except database.INTEGRITY_ERRORS as exc:
         if "APPROVAL_REQUIRED" in str(exc):
             raise PermissionError(
                 "Blocked by the approval gate: no approved approval exists for this draft and destination."
@@ -902,10 +1008,10 @@ def acquire_verifier_lease(conn: sqlite3.Connection) -> str:
     conn.execute(
         "INSERT INTO verifier_tokens(token, created_at) VALUES (?, ?)", (token, now_iso())
     )
-    # Housekeeping: a token is only needed for the duration of one write.
-    conn.execute(
-        "DELETE FROM verifier_tokens WHERE created_at < datetime('now', '-1 hour')"
-    )
+    # Housekeeping: a token is only needed for the duration of one write. The
+    # cutoff is computed here because SQLite's datetime() has no Postgres twin.
+    cutoff = (datetime.now(timezone.utc) - timedelta(hours=1)).isoformat(timespec="seconds")
+    conn.execute("DELETE FROM verifier_tokens WHERE created_at < ?", (cutoff,))
     return token
 
 
@@ -949,9 +1055,14 @@ def upsert_tracker(conn: sqlite3.Connection, run_id: str, **values: Any) -> None
     values["last_checked_at"] = now_iso()
     if not row:
         conn.execute(
-            "INSERT INTO tracker(run_id, reg_no, due_date, reply_state, appeal_draft_id, transferred_to, last_checked_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            """INSERT INTO tracker(
+                   run_id, reg_no, due_date, reply_state, appeal_draft_id, transferred_to,
+                   last_checked_at, appeal_filed_at, second_appeal_draft_id, complaint_draft_id
+               ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (run_id, values.get("reg_no"), values.get("due_date"), values.get("reply_state", "awaiting"),
-             values.get("appeal_draft_id"), values.get("transferred_to"), values["last_checked_at"]),
+             values.get("appeal_draft_id"), values.get("transferred_to"), values["last_checked_at"],
+             values.get("appeal_filed_at"), values.get("second_appeal_draft_id"),
+             values.get("complaint_draft_id")),
         )
         return
     sets = ", ".join(f"{k}=?" for k in values)

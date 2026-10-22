@@ -26,7 +26,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from agent import db
-from common import config
+from common import config, database
 
 KIND = "deadline_check"
 LEASE_SECONDS = 120
@@ -94,7 +94,8 @@ def claim(
                 """SELECT * FROM jobs
                    WHERE status='pending' AND due_at <= ?
                      AND (lease_until IS NULL OR lease_until < ?)
-                   ORDER BY due_at LIMIT ?""",
+                   ORDER BY due_at LIMIT ?"""
+                + database.for_update_skip_locked(conn),
                 (_iso(now), _iso(now), limit),
             )
         )

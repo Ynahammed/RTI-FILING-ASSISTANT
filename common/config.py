@@ -16,6 +16,24 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 DATA_DIR = Path(os.getenv("RTI_DATA_DIR", PROJECT_ROOT / "data")).resolve()
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 
+# Database backend. Empty means the local SQLite files above. A postgresql://
+# URL moves that service onto Postgres; RTI_DATABASE_URL applies to both services
+# unless a per-service URL overrides it. The URLs may carry credentials, so they
+# are never printed or included in an error message.
+DATABASE_URL = os.getenv("RTI_DATABASE_URL", "").strip()
+AGENT_DATABASE_URL = os.getenv("RTI_AGENT_DATABASE_URL", DATABASE_URL).strip()
+PORTAL_DATABASE_URL = os.getenv("RTI_PORTAL_DATABASE_URL", DATABASE_URL).strip()
+for _name, _value in (
+    ("RTI_DATABASE_URL", DATABASE_URL),
+    ("RTI_AGENT_DATABASE_URL", AGENT_DATABASE_URL),
+    ("RTI_PORTAL_DATABASE_URL", PORTAL_DATABASE_URL),
+):
+    if _value and not _value.lower().startswith(("postgresql://", "postgres://")):
+        raise RuntimeError(
+            f"{_name} must start with postgresql:// or postgres://; "
+            "leave it empty to use the local SQLite file"
+        )
+
 AGENT_DB = Path(os.getenv("RTI_AGENT_DB", DATA_DIR / "agent.db")).resolve()
 PORTAL_DB = Path(os.getenv("RTI_PORTAL_DB", DATA_DIR / "portal.db")).resolve()
 
