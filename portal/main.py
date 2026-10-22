@@ -100,7 +100,11 @@ def home() -> Any:
 
 @app.get("/healthz")
 def healthz() -> dict[str, str]:
-    return {"status": "ok", "service": "mock-portal"}
+    return {
+        "status": "ok",
+        "service": "mock-portal",
+        "database": "postgres" if config.PORTAL_DATABASE_URL else "sqlite",
+    }
 
 
 @app.get("/apply")

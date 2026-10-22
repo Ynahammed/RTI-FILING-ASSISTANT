@@ -68,7 +68,12 @@ class TestResultIn(BaseModel):
 @app.get("/api/health")
 def health() -> dict[str, Any]:
     # Browser launch/reuse counts are cheap evidence that the pool is doing its job.
-    return {"status": "ok", "service": "rti-pilot-agent", "browser": browser.stats()}
+    return {
+        "status": "ok",
+        "service": "rti-pilot-agent",
+        "database": "postgres" if config.AGENT_DATABASE_URL else "sqlite",
+        "browser": browser.stats(),
+    }
 
 
 @app.get("/api/ready")
