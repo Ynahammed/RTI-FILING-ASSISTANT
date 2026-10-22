@@ -1,7 +1,7 @@
 {
-  "version": "2026-10-21",
-  "disclaimer": "Sections 6(3), 7(1), 8(1)(j) and 19 are cited to the Act text. State fee entries remain unverified seeded assumptions, because state rules under sections 27 and 28 vary and were not checked for this pilot. Verify before any real filing.",
-  "provenance_notes": "Quotes were checked against the Central Information Commission's copy of the Act and a proofread transcript of the Gazette text on Wikisource. The India Code PDF (indiacode.nic.in/bitstream/123456789/2065/1/aa2005.pdf) is the official publication but returned HTTP 403 to automated fetching.",
+  "version": "2026-10-22",
+  "disclaimer": "Sections 6(3), 7(1), 8(1)(j), 18(1), 19, 19(3), 19(6) and 20(1) are cited to the Act text. State fee entries remain unverified seeded assumptions, because state rules under sections 27 and 28 vary and were not checked for this pilot. Verify before any real filing.",
+  "provenance_notes": "Quotes were checked against the Central Information Commission's copy of the Act, the Commission's own section 18(1) complaint page and its section 20(1) penalties page, and a proofread transcript of the Gazette text on Wikisource. The India Code PDF (indiacode.nic.in/bitstream/123456789/2065/1/aa2005.pdf) is the official publication but returned HTTP 403 to automated fetching. The second-appeal, decision-window, complaint and penalty sections were added on 2026-10-22.",
   "sections": {
     "6(3)": {
       "title": "Transfer of application",
@@ -56,6 +56,62 @@
           "url": "https://cic.gov.in/sites/default/files/RTI-Act_English.pdf",
           "retrieved_at": "2026-10-21",
           "quote": "Any person who, does not receive a decision within the time specified in sub-section (1) or clause (a) of sub-section (3) of section 7, or is aggrieved by a decision of the Central Public Information Officer or State Public Information Officer, as the case may be, may within thirty days from the expiry of such period or from the receipt of such a decision prefer an appeal to such officer who is senior in rank",
+          "verified": true
+        }
+      ]
+    },
+    "19(3)": {
+      "title": "Second appeal",
+      "rule": "A second appeal against a first-appeal decision, or against a first appeal that was not decided, lies to the Information Commission within ninety days.",
+      "appeal_window_days": 90,
+      "citations": [
+        {
+          "source": "The Right to Information Act, 2005 (No. 22 of 2005), section 19(3)",
+          "url": "https://cic.gov.in/sites/default/files/RTI-Act_English.pdf",
+          "retrieved_at": "2026-10-22",
+          "quote": "A second appeal against the decision under sub-section (1) shall lie within ninety days from the date on which the decision should have been made or was actually received, with the Central Information Commission or the State Information Commission: Provided that the Central Information Commission or the State Information Commission, as the case may be, may admit an appeal after the expiry of the said period of ninety days, if it is satisfied that the appellant was prevented by sufficient cause from filing the appeal in time.",
+          "verified": true
+        }
+      ]
+    },
+    "19(6)": {
+      "title": "Decision on appeal",
+      "rule": "The Information Commission decides an appeal within forty-five days, extendable by another forty-five days for reasons recorded in writing.",
+      "decision_days": 45,
+      "citations": [
+        {
+          "source": "The Right to Information Act, 2005 (No. 22 of 2005), section 19(6)",
+          "url": "https://cic.gov.in/sites/default/files/RTI-Act_English.pdf",
+          "retrieved_at": "2026-10-22",
+          "quote": "The Central Information Commission or State Information Commission, as the case may be, shall decide the appeal within a period of forty-five days from the date on which such appeal is filed before it: Provided that the Commission may, for reasons to be recorded in writing, extend the said period by another forty-five days.",
+          "verified": true
+        }
+      ]
+    },
+    "18(1)": {
+      "title": "Complaint to the Information Commission",
+      "rule": "A complaint lies to the Information Commission where no response was given within the time limit, access was refused, or the reply was incomplete, misleading or false.",
+      "citations": [
+        {
+          "source": "Central Information Commission, section 18(1)",
+          "url": "https://cic.gov.in/complaint",
+          "retrieved_at": "2026-10-22",
+          "quote": "who has not been given a response to a request for information or access to information within the time limit specified under this Act",
+          "verified": true
+        }
+      ]
+    },
+    "20(1)": {
+      "title": "Penalty on the Public Information Officer",
+      "rule": "Where the Commission finds a refusal, delay, misleading reply or obstruction without reasonable cause, it imposes a penalty of Rs 250 for each day of delay, capped at Rs 25,000.",
+      "penalty_per_day_inr": 250,
+      "penalty_cap_inr": 25000,
+      "citations": [
+        {
+          "source": "Central Information Commission, section 20(1)",
+          "url": "https://cic.gov.in/penalties",
+          "retrieved_at": "2026-10-22",
+          "quote": "Where the Central Information Commission or the State Information Commission, as the case may be, at the time of deciding any complaint or appeal is of the opinion that the Central Public Information Officer or the State Public Information Officer, as the case may be, has, without any reasonable cause, refused to receive an application for information or has not furnished information within the time specified under sub-section (1) of section 7 or malafidely denied the request for information or knowingly given incorrect, incomplete or misleading information or destroyed information which was the subject of the request or obstructed in any manner in furnishing the information, it shall impose a penalty of two hundred and fifty rupees each day till application is received or information is furnished, so however, the total amount of such penalty shall not exceed twenty-five thousand rupees",
           "verified": true
         }
       ]

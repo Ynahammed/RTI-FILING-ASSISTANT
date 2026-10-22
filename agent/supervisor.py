@@ -11,16 +11,19 @@ from __future__ import annotations
 import json
 import sqlite3
 import threading
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from agent import agents, db, filing, messages, nlu, tracker, verifier, worker
+from agent import agents, db, filing, messages, nlu, rules, tracker, verifier, worker
 from common import config
 
 _locks: dict[str, threading.Lock] = {}
 _locks_guard = threading.Lock()
 
-TERMINAL = {"review_queue", "redirected", "declined", "closed", "appeal_ready"}
+TERMINAL = {
+    "review_queue", "redirected", "declined", "closed", "appeal_ready",
+    "second_appeal_ready", "complaint_ready",
+}
 
 
 def _lock(run_id: str) -> threading.Lock:
@@ -587,7 +590,10 @@ def track(run_id: str) -> dict[str, Any]:
             if not run["portal_app_id"]:
                 raise ValueError("run has not been filed")
             result = tracker.track(conn, run_id)
-            if result.get("appeal"):
+            # The citizen-facing copy describes the first appeal. A second appeal or
+            # complaint is a new card to approve, not a chat message the templates
+            # would describe accurately, so it is left to the approval surface.
+            if result.get("appeal") and result.get("ladder") in {None, "first"}:
                 _message_once(conn, run_id, messages.t("appeal", run["language"]))
             return db.run_detail(conn, run_id)
         finally:
@@ -595,15 +601,41 @@ def track(run_id: str) -> dict[str, Any]:
 
 
 def approve_appeal(run_id: str) -> dict[str, Any]:
+    """Approve the appeal on the card and move the ladder one rung.
+
+    Approving the first appeal does not close the run: the appellate authority now
+    has the file, so the tracker watches the Section 19(6) window and escalates if
+    it passes. Approving a second appeal or a complaint does close the run.
+    """
     with _lock(run_id):
         conn = db.connect()
         try:
             run = db.get_run(conn, run_id)
-            if run["status"] != "appeal_ready":
+            if run["status"] not in {"appeal_ready", "second_appeal_ready", "complaint_ready"}:
                 return db.run_detail(conn, run_id)
             approval = db.current_approval(conn, run_id)
             if approval and approval["status"] == "pending":
                 db.approve(conn, run_id)
+
+            if run["status"] == "appeal_ready":
+                filed_at = db.now_iso()
+                db.upsert_tracker(conn, run_id, appeal_filed_at=filed_at)
+                db.set_status(conn, run_id, "appeal_filed")
+                window_days = int(rules.section("19(6)").get("decision_days", 45) or 45)
+                worker.enqueue_check(
+                    conn, run_id,
+                    due_at=datetime.now(timezone.utc) + timedelta(days=window_days),
+                )
+                db.add_evidence(
+                    conn, run_id, source_id="APPEAL-FILED", source_url="",
+                    extracted_value=(
+                        f"First appeal approved by a human and treated as filed on {filed_at}; "
+                        f"the tracker will check the Section 19(6) window of {window_days} days."
+                    ),
+                    source="approval", kind="appeal",
+                )
+                return db.run_detail(conn, run_id)
+
             db.set_status(conn, run_id, "closed")
             return db.run_detail(conn, run_id)
         finally:

@@ -33,7 +33,9 @@ LEASE_SECONDS = 120
 MAX_ATTEMPTS = 5
 BACKOFF_CAP_MINUTES = 60
 JOB_STATUSES = {"pending", "done", "failed", "cancelled"}
-TERMINAL_RUN_STATUSES = {"appeal_ready", "closed"}
+# A drafted second appeal or complaint is waiting for a human, exactly like a
+# first appeal: the deadline job has nothing left to watch until someone decides.
+TERMINAL_RUN_STATUSES = {"appeal_ready", "second_appeal_ready", "complaint_ready", "closed"}
 
 
 def now_utc() -> datetime:

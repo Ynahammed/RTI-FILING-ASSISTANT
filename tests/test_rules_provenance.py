@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import copy
 import json
+from datetime import date
 
 from agent import rules
 from common import config
@@ -17,8 +18,9 @@ def test_every_required_rule_is_cited_and_verified():
     assert rules.validate() == []
     provenance = rules.provenance()
     assert provenance["uncited"] == 0
-    assert provenance["sections_cited"] == provenance["sections_required"] == 5
-    assert provenance["sections_verified"] == 5
+    # Six statutory rules plus the fee rule: every section the pipeline acts on.
+    assert provenance["sections_cited"] == provenance["sections_required"] == 9
+    assert provenance["sections_verified"] == 9
 
 
 def test_each_citation_has_a_url_quote_and_date():
@@ -26,7 +28,9 @@ def test_each_citation_has_a_url_quote_and_date():
         for citation in section["citations"]:
             assert citation["url"].startswith("https://")
             assert len(citation["quote"]) > 30
-            assert citation["retrieved_at"] == "2026-10-21"
+            # A date, not one frozen string: new citations are added over time and
+            # the assertion must still mean "this was retrieved and dated".
+            assert date.fromisoformat(citation["retrieved_at"]) <= date.today()
             assert citation["verified"] is True
 
 

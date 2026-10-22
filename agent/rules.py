@@ -11,7 +11,9 @@ from urllib.parse import urlparse
 from common import config
 
 # Every rule the product acts on. A rule without a citation is a claim, not law.
-REQUIRED_SECTIONS = ("6(3)", "7(1)", "8(1)(j)", "19", "fee")
+REQUIRED_SECTIONS = (
+    "6(3)", "7(1)", "8(1)(j)", "19", "19(3)", "19(6)", "18(1)", "20(1)", "fee",
+)
 MIN_QUOTE = 30
 
 
