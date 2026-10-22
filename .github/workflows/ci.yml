@@ -1,0 +1,59 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: checks and tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: rti
+          POSTGRES_PASSWORD: rti
+          POSTGRES_DB: rti
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U rti"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      RTI_TEST_POSTGRES_URL: postgresql://rti:rti@127.0.0.1:5432/rti
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            requirements-dev.txt
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements-dev.txt
+
+      - name: Statutory rules keep their citations
+        run: python -m scripts.check_rules
+
+      - name: Authority registry coverage
+        run: python -m scripts.check_registry
+
+      - name: Fee provenance is at least structurally sound
+        run: python -m scripts.check_fees
+
+      - name: Unit and gate tests
+        run: python -m pytest -q
